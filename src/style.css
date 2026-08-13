@@ -89,6 +89,11 @@ a.nav-btn-primary:hover {
   color: #fff;
 }
 
+.nav-btn-compact,
+a.nav-btn-compact {
+  min-width: 0;
+}
+
 .nav-menu-item,
 a.nav-menu-item {
   display: flex;

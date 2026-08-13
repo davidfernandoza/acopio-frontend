@@ -224,12 +224,12 @@ onUnmounted(stopCarousel);
 <template>
   <div
     v-if="slides.length && showAdjacent"
-    class="flex w-full items-center justify-center gap-16"
+    class="gallery-carousel"
   >
     <button
       v-if="showPreviousSlide && previousSlideIndex !== null"
       type="button"
-      class="w-[140px] shrink-0 origin-center scale-90 opacity-70 transition duration-500 hover:opacity-90"
+      class="gallery-side"
       @click="onSideSlideClick(previousSlideIndex)"
     >
       <div class="relative overflow-hidden rounded-2xl border border-black/10 bg-[#14212b] shadow-sm">
@@ -243,7 +243,7 @@ onUnmounted(stopCarousel);
         </Transition>
       </div>
     </button>
-    <div class="relative w-[220px] shrink-0">
+    <div class="gallery-center">
       <div class="relative overflow-hidden rounded-2xl border border-black/10 bg-[#14212b] shadow-lg">
         <Transition :name="galleryTransitionName">
           <div :key="slides[activeSlideIndex].id" class="relative block w-full">
@@ -255,10 +255,28 @@ onUnmounted(stopCarousel);
             <slot name="overlay" :slide="slides[activeSlideIndex]" :index="activeSlideIndex" />
           </div>
         </Transition>
+        <button
+          v-if="previousSlideIndex !== null"
+          type="button"
+          class="gallery-nav gallery-nav--prev"
+          aria-label="Imagen anterior"
+          @click="onSideSlideClick(previousSlideIndex)"
+        >
+          <ChevronLeft :size="22" :stroke-width="2.2" />
+        </button>
+        <button
+          v-if="nextSlideIndex !== null"
+          type="button"
+          class="gallery-nav gallery-nav--next"
+          aria-label="Imagen siguiente"
+          @click="onSideSlideClick(nextSlideIndex)"
+        >
+          <ChevronRight :size="22" :stroke-width="2.2" />
+        </button>
         <div class="absolute bottom-3 left-3 z-10">
           <button
             type="button"
-            class="nav-btn nav-btn-primary"
+            class="nav-btn nav-btn-primary nav-btn-compact"
             @click="onCenterSlideClick"
           >
             Ver
@@ -277,7 +295,7 @@ onUnmounted(stopCarousel);
     <button
       v-if="showNextSlide && nextSlideIndex !== null"
       type="button"
-      class="w-[140px] shrink-0 origin-center scale-90 opacity-70 transition duration-500 hover:opacity-90"
+      class="gallery-side"
       @click="onSideSlideClick(nextSlideIndex)"
     >
       <div class="relative overflow-hidden rounded-2xl border border-black/10 bg-[#14212b] shadow-sm">
@@ -303,7 +321,7 @@ onUnmounted(stopCarousel);
       <button
         v-if="showHomeControls"
         type="button"
-        class="home-carousel-nav"
+        class="home-carousel-nav home-carousel-nav--prev"
         aria-label="Imagen anterior"
         @click="goHomePrevious"
       >
@@ -337,7 +355,7 @@ onUnmounted(stopCarousel);
       <button
         v-if="showHomeControls"
         type="button"
-        class="home-carousel-nav"
+        class="home-carousel-nav home-carousel-nav--next"
         aria-label="Imagen siguiente"
         @click="goHomeNext"
       >
@@ -376,11 +394,11 @@ onUnmounted(stopCarousel);
 }
 
 .home-carousel-row {
+  position: relative;
   display: flex;
   width: 100%;
   min-width: 0;
   align-items: center;
-  gap: 0.5rem;
 }
 
 .home-carousel-viewport {
@@ -410,6 +428,9 @@ onUnmounted(stopCarousel);
 }
 
 .home-carousel-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
   display: inline-flex;
   height: 2.5rem;
   width: 2.5rem;
@@ -421,7 +442,16 @@ onUnmounted(stopCarousel);
   background: #fff;
   color: #1f6f5b;
   cursor: pointer;
+  transform: translateY(-50%);
   transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.home-carousel-nav--prev {
+  left: 0.35rem;
+}
+
+.home-carousel-nav--next {
+  right: 0.35rem;
 }
 
 .home-carousel-nav:hover {
@@ -488,5 +518,77 @@ onUnmounted(stopCarousel);
 .gallery-prev-leave-to {
   opacity: 0;
   transform: translateX(36px) scale(0.96);
+}
+
+.gallery-carousel {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.gallery-side {
+  display: none;
+  width: 140px;
+  flex-shrink: 0;
+  transform-origin: center;
+  transform: scale(0.9);
+  cursor: pointer;
+  opacity: 0.7;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  transition: opacity 0.3s ease;
+}
+
+.gallery-side:hover {
+  opacity: 0.9;
+}
+
+.gallery-center {
+  position: relative;
+  width: min(220px, 100%);
+  flex-shrink: 0;
+}
+
+.gallery-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 10;
+  display: inline-flex;
+  height: 2.5rem;
+  width: 2.5rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgb(255 255 255 / 0.45);
+  border-radius: 9999px;
+  background: rgb(255 255 255 / 0.92);
+  color: #1f6f5b;
+  cursor: pointer;
+  transform: translateY(-50%);
+}
+
+.gallery-nav--prev {
+  left: 0.5rem;
+}
+
+.gallery-nav--next {
+  right: 0.5rem;
+}
+
+@media (min-width: 768px) {
+  .gallery-carousel {
+    gap: 4rem;
+  }
+
+  .gallery-side {
+    display: block;
+  }
+
+  .gallery-nav {
+    display: none;
+  }
 }
 </style>

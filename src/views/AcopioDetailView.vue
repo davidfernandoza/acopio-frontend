@@ -222,9 +222,9 @@ watch(
           <li
             v-for="contact in acopiosStore.currentAcopio.contacts || []"
             :key="contact.id"
-            class="flex items-center justify-between gap-3"
+            class="flex flex-wrap items-center justify-between gap-3"
           >
-            <div class="flex min-w-0 items-center gap-2">
+            <div class="flex min-w-0 flex-1 items-center gap-2">
               <span class="shrink-0 text-[#1f6f5b]" aria-hidden="true">
                 <svg
                   v-if="contact.type === 'whatsapp'"
@@ -248,7 +248,7 @@ watch(
                 {{ contactLabel(contact) }}
               </a>
               <span v-else>{{ contactLabel(contact) }}</span>
-              <span v-if="contact.label" class="shrink-0 text-black/50">
+              <span v-if="contact.label" class="min-w-0 truncate text-black/50">
                 · {{ contact.label }}
               </span>
             </div>
@@ -257,7 +257,7 @@ watch(
               :href="contactHref(contact)"
               :target="contact.type === 'whatsapp' ? '_blank' : undefined"
               rel="noopener noreferrer"
-              class="nav-btn nav-btn-primary shrink-0"
+              class="nav-btn nav-btn-primary nav-btn-compact shrink-0"
             >
               Contactar
             </a>
@@ -307,7 +307,7 @@ watch(
             class="rounded-lg border border-black/10 bg-white p-3 text-sm"
             :class="need.needType === 'money' ? 'sm:col-span-2' : ''"
           >
-            <div class="flex gap-3">
+            <div class="flex flex-wrap gap-3">
               <NeedIcon :icon-key="need.iconKey" :size="24" />
               <div class="min-w-0 flex-1">
                 <p class="font-medium">
@@ -335,7 +335,7 @@ watch(
                   </li>
                 </ul>
               </div>
-              <div v-if="need.qrUrl" class="flex shrink-0 flex-col items-center gap-2">
+              <div v-if="need.qrUrl" class="flex shrink-0 flex-row items-center gap-2 sm:flex-col">
                 <img
                   :src="resolveMediaUrl(need.qrUrl)"
                   alt="QR"
@@ -343,7 +343,7 @@ watch(
                 />
                 <button
                   type="button"
-                  class="nav-btn"
+                  class="nav-btn nav-btn-compact"
                   @click="openQrModal(need)"
                 >
                   Ver QR

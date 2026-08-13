@@ -233,8 +233,8 @@ watch([markers, viewerLocation], async () => {
           :key="acopio.id"
           class="rounded-xl border border-black/10 bg-white/70 p-4"
         >
-          <div class="flex items-start justify-between gap-3">
-            <div class="flex min-w-0 items-center gap-3">
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="flex min-w-0 flex-1 items-center gap-3">
               <img
                 :src="resolveMediaUrl(acopio.avatarUrl) || buildInitialsAvatarUrl(acopio.name)"
                 :alt="acopio.name"
@@ -254,7 +254,7 @@ watch([markers, viewerLocation], async () => {
             </div>
             <RouterLink
               :to="`/acopios/${acopio.id}`"
-              class="nav-btn nav-btn-primary shrink-0"
+              class="nav-btn nav-btn-primary nav-btn-compact shrink-0"
             >
               Ver
             </RouterLink>
