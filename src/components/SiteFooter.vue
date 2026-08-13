@@ -32,7 +32,7 @@ async function submitContactForm() {
     errorMessage.value =
       axiosError.response?.data?.details?.[0] ||
       axiosError.response?.data?.message ||
-      'No se pudo enviar el mensaje';
+      'No se pudo conectar con el servidor. Revisa que el backend esté en marcha.';
   } finally {
     submitting.value = false;
   }
@@ -49,8 +49,8 @@ async function submitContactForm() {
         </p>
         <p class="mt-6 text-sm text-white/55">
           Soporte:
-          <a href="mailto:soporte@acopio.lat" class="text-[#7dbaa8] underline">
-            soporte@acopio.lat
+          <a href="mailto:soporte.acopio1@gmail.com" class="text-[#7dbaa8] underline">
+            soporte.acopio1@gmail.com
           </a>
         </p>
       </div>
