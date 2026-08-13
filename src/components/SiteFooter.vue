@@ -48,7 +48,6 @@ async function submitContactForm() {
           Encuentra y gestiona puntos de acopio de ayuda.
         </p>
         <p class="mt-6 text-sm text-white/55">
-          Soporte:
           <a href="mailto:soporte.acopio1@gmail.com" class="text-[#7dbaa8] underline">
             soporte.acopio1@gmail.com
           </a>
