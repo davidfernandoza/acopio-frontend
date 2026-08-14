@@ -249,11 +249,11 @@ watch([markers, viewerLocation], async () => {
         No hay acopios abiertos que coincidan con la búsqueda.
       </p>
 
-      <div class="grid gap-4 md:grid-cols-2">
+      <div class="columns-1 gap-x-4 md:columns-2">
         <article
           v-for="acopio in filteredAcopios"
           :key="acopio.id"
-          class="min-w-0 rounded-xl border border-black/10 bg-white/70 p-4"
+          class="mb-4 inline-block w-full break-inside-avoid rounded-xl border border-black/10 bg-white/70 p-4"
         >
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="flex min-w-0 flex-1 items-center gap-3">

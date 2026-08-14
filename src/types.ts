@@ -35,12 +35,15 @@ export interface City {
 export interface AcopioContact {
   id: number;
   idAcopio: number;
-  type: 'whatsapp' | 'email';
+  type: 'whatsapp' | 'email' | 'landline';
   value: string;
   idCountry: number | null;
+  localPrefix?: string | null;
+  extension?: string | null;
   label: string | null;
   phoneCode?: string | null;
   whatsappLink?: string | null;
+  telLink?: string | null;
   mailtoLink?: string | null;
 }
 

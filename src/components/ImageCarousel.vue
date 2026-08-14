@@ -61,19 +61,18 @@ const homeActiveDotIndex = computed(() =>
 
 const showHomeControls = computed(() => !props.showAdjacent && props.slides.length > 1);
 
-const previousSlideIndex = computed(() => {
-  if (props.slides.length < 2) {
+function wrapSlideIndex(offset: number) {
+  const slideCount = props.slides.length;
+  if (slideCount < 2) {
     return null;
   }
-  return (activeSlideIndex.value - 1 + props.slides.length) % props.slides.length;
-});
+  return (activeSlideIndex.value + offset + slideCount) % slideCount;
+}
 
-const nextSlideIndex = computed(() => {
-  if (props.slides.length < 2) {
-    return null;
-  }
-  return (activeSlideIndex.value + 1) % props.slides.length;
-});
+const previous2SlideIndex = computed(() => wrapSlideIndex(-2));
+const previousSlideIndex = computed(() => wrapSlideIndex(-1));
+const nextSlideIndex = computed(() => wrapSlideIndex(1));
+const next2SlideIndex = computed(() => wrapSlideIndex(2));
 
 const showPreviousSlide = computed(
   () =>
@@ -83,6 +82,62 @@ const showPreviousSlide = computed(
 );
 
 const showNextSlide = computed(() => props.showAdjacent && nextSlideIndex.value !== null);
+
+const showOuterAdjacentSlides = computed(
+  () => props.showAdjacent && props.slides.length >= 5,
+);
+
+const showPrevious2Slide = computed(
+  () => showOuterAdjacentSlides.value && previous2SlideIndex.value !== null,
+);
+
+const showNext2Slide = computed(
+  () => showOuterAdjacentSlides.value && next2SlideIndex.value !== null,
+);
+
+type GallerySideSlide = {
+  positionKey: string;
+  slideIndex: number;
+  isOuter: boolean;
+};
+
+const galleryLeftSlides = computed<GallerySideSlide[]>(() => {
+  const sideSlides: GallerySideSlide[] = [];
+  if (showPrevious2Slide.value && previous2SlideIndex.value !== null) {
+    sideSlides.push({
+      positionKey: 'prev-2',
+      slideIndex: previous2SlideIndex.value,
+      isOuter: true,
+    });
+  }
+  if (showPreviousSlide.value && previousSlideIndex.value !== null) {
+    sideSlides.push({
+      positionKey: 'prev-1',
+      slideIndex: previousSlideIndex.value,
+      isOuter: false,
+    });
+  }
+  return sideSlides;
+});
+
+const galleryRightSlides = computed<GallerySideSlide[]>(() => {
+  const sideSlides: GallerySideSlide[] = [];
+  if (showNextSlide.value && nextSlideIndex.value !== null) {
+    sideSlides.push({
+      positionKey: 'next-1',
+      slideIndex: nextSlideIndex.value,
+      isOuter: false,
+    });
+  }
+  if (showNext2Slide.value && next2SlideIndex.value !== null) {
+    sideSlides.push({
+      positionKey: 'next-2',
+      slideIndex: next2SlideIndex.value,
+      isOuter: true,
+    });
+  }
+  return sideSlides;
+});
 
 const galleryTransitionName = computed(() =>
   slideDirection.value === 1 ? 'gallery-next' : 'gallery-prev',
@@ -227,17 +282,19 @@ onUnmounted(stopCarousel);
     class="gallery-carousel"
   >
     <button
-      v-if="showPreviousSlide && previousSlideIndex !== null"
+      v-for="sideSlide in galleryLeftSlides"
+      :key="sideSlide.positionKey"
       type="button"
       class="gallery-side"
-      @click="onSideSlideClick(previousSlideIndex)"
+      :class="{ 'gallery-side--outer': sideSlide.isOuter }"
+      @click="onSideSlideClick(sideSlide.slideIndex)"
     >
       <div class="relative overflow-hidden rounded-2xl border border-black/10 bg-[#14212b] shadow-sm">
         <Transition :name="galleryTransitionName">
           <img
-            :key="slides[previousSlideIndex].id"
-            :src="resolveMediaUrl(slides[previousSlideIndex].imageUrl)"
-            :alt="slides[previousSlideIndex].alt || ''"
+            :key="slides[sideSlide.slideIndex].id"
+            :src="resolveMediaUrl(slides[sideSlide.slideIndex].imageUrl)"
+            :alt="slides[sideSlide.slideIndex].alt || ''"
             class="aspect-[9/16] w-full object-cover"
           />
         </Transition>
@@ -293,17 +350,19 @@ onUnmounted(stopCarousel);
       </div>
     </div>
     <button
-      v-if="showNextSlide && nextSlideIndex !== null"
+      v-for="sideSlide in galleryRightSlides"
+      :key="sideSlide.positionKey"
       type="button"
       class="gallery-side"
-      @click="onSideSlideClick(nextSlideIndex)"
+      :class="{ 'gallery-side--outer': sideSlide.isOuter }"
+      @click="onSideSlideClick(sideSlide.slideIndex)"
     >
       <div class="relative overflow-hidden rounded-2xl border border-black/10 bg-[#14212b] shadow-sm">
         <Transition :name="galleryTransitionName">
           <img
-            :key="slides[nextSlideIndex].id"
-            :src="resolveMediaUrl(slides[nextSlideIndex].imageUrl)"
-            :alt="slides[nextSlideIndex].alt || ''"
+            :key="slides[sideSlide.slideIndex].id"
+            :src="resolveMediaUrl(slides[sideSlide.slideIndex].imageUrl)"
+            :alt="slides[sideSlide.slideIndex].alt || ''"
             class="aspect-[9/16] w-full object-cover"
           />
         </Transition>
@@ -583,12 +642,22 @@ onUnmounted(stopCarousel);
     gap: 4rem;
   }
 
-  .gallery-side {
+  .gallery-side:not(.gallery-side--outer) {
     display: block;
   }
 
   .gallery-nav {
     display: none;
+  }
+}
+
+@media (min-width: 1024px) {
+  .gallery-carousel {
+    gap: 2rem;
+  }
+
+  .gallery-side--outer {
+    display: block;
   }
 }
 </style>

@@ -7,7 +7,7 @@ import { resolveMediaUrl, buildInitialsAvatarUrl } from '../utils/media';
 import { formatThousands } from '../utils/numberFormat';
 import NeedIcon from '../components/NeedIcon.vue';
 import ImageCarousel from '../components/ImageCarousel.vue';
-import { Mail, MapPin } from '@lucide/vue';
+import { Mail, MapPin, Phone } from '@lucide/vue';
 import { groupNeedsByType, groupOffersByCategory } from '../constants/needIcons';
 import type { AcopioContact, AcopioNeed } from '../types';
 
@@ -77,12 +77,19 @@ function contactHref(contact: AcopioContact) {
   if (contact.type === 'whatsapp') {
     return contact.whatsappLink || '';
   }
+  if (contact.type === 'landline') {
+    return contact.telLink || '';
+  }
   return contact.mailtoLink || '';
 }
 
 function contactLabel(contact: AcopioContact) {
   if (contact.type === 'whatsapp') {
     return `${contact.phoneCode || ''} ${contact.value}`.trim();
+  }
+  if (contact.type === 'landline') {
+    const extensionText = contact.extension ? ` ext. ${contact.extension}` : '';
+    return `(${contact.localPrefix || ''}) ${contact.value}${extensionText}`.trim();
   }
   return contact.value;
 }
@@ -235,6 +242,7 @@ watch(
                     d="M20.52 3.48A11.86 11.86 0 0 0 12.04 0C5.44 0 .07 5.37.07 11.97c0 2.11.55 4.17 1.6 6L0 24l6.18-1.62a11.93 11.93 0 0 0 5.86 1.5h.01c6.6 0 11.97-5.37 11.97-11.97 0-3.2-1.25-6.2-3.5-8.43ZM12.05 21.8h-.01a9.9 9.9 0 0 1-5.04-1.38l-.36-.21-3.67.96.98-3.57-.24-.37a9.86 9.86 0 0 1-1.51-5.26c0-5.45 4.44-9.88 9.9-9.88 2.64 0 5.12 1.03 6.99 2.9a9.82 9.82 0 0 1 2.9 6.98c0 5.45-4.44 9.83-9.94 9.83Zm5.43-7.4c-.3-.15-1.76-.87-2.03-.96-.27-.1-.47-.15-.67.15-.2.3-.77.96-.94 1.16-.17.2-.35.22-.65.07-.3-.15-1.26-.46-2.4-1.48a8.97 8.97 0 0 1-1.66-2.06c-.17-.3 0-.46.13-.6.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.61-.92-2.2-.24-.58-.49-.5-.67-.5h-.57c-.2 0-.52.07-.8.37-.27.3-1.04 1.02-1.04 2.48s1.07 2.88 1.22 3.08c.15.2 2.1 3.2 5.08 4.49.71.3 1.26.49 1.69.62.71.23 1.36.2 1.87.12.57-.09 1.76-.72 2.01-1.41.25-.7.25-1.29.17-1.41-.07-.13-.27-.2-.57-.35Z"
                   />
                 </svg>
+                <Phone v-else-if="contact.type === 'landline'" :size="20" :stroke-width="1.9" />
                 <Mail v-else :size="20" :stroke-width="1.9" />
               </span>
               <a

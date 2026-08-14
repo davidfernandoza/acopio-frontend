@@ -66,9 +66,11 @@ const form = reactive({
   longitude: 0,
   contacts: [
     {
-      type: 'whatsapp' as 'whatsapp' | 'email',
+      type: 'whatsapp' as 'whatsapp' | 'email' | 'landline',
       value: '',
       idCountry: 0,
+      localPrefix: '',
+      extension: '',
       label: '',
     },
   ],
@@ -115,6 +117,7 @@ const openingModeOptions = [
 const contactTypeOptions = [
   { value: 'whatsapp', label: 'WhatsApp' },
   { value: 'email', label: 'Email' },
+  { value: 'landline', label: 'Teléfono fijo' },
 ];
 
 const moneyNeedsCount = computed(
@@ -505,6 +508,8 @@ function addContact() {
     type: 'email',
     value: '',
     idCountry: form.idCountry || geoStore.countries[0]?.id || 0,
+    localPrefix: '',
+    extension: '',
     label: '',
   });
 }
@@ -646,7 +651,12 @@ function validateCreateForm(): string | null {
     }
   }
 
-  const filledContacts = form.contacts.filter((contact) => contact.value.trim());
+  const filledContacts = form.contacts.filter((contact) => {
+    if (contact.type === 'landline') {
+      return contact.localPrefix.trim() && contact.value.trim();
+    }
+    return contact.value.trim();
+  });
   if (!filledContacts.length) {
     return 'Debes agregar al menos un contacto';
   }
@@ -656,6 +666,17 @@ function validateCreateForm(): string | null {
     }
     if (contact.type === 'email' && !isValidEmail(contact.value.trim())) {
       return `El correo de contacto no es válido: ${contact.value}`;
+    }
+    if (contact.type === 'landline') {
+      if (!/^\d+$/.test(contact.localPrefix.trim())) {
+        return 'El prefijo local del teléfono fijo debe ser numérico';
+      }
+      if (contact.value.replace(/\D/g, '').length < 5) {
+        return 'El número de teléfono fijo no es válido';
+      }
+      if (contact.extension.trim() && !/^\d+$/.test(contact.extension.trim())) {
+        return 'La extensión del teléfono fijo debe ser numérica';
+      }
     }
   }
 
@@ -739,11 +760,18 @@ async function submitForm() {
     }));
 
     const contacts = form.contacts
-      .filter((contact) => contact.value.trim())
+      .filter((contact) => {
+        if (contact.type === 'landline') {
+          return contact.localPrefix.trim() && contact.value.trim();
+        }
+        return contact.value.trim();
+      })
       .map((contact) => ({
         type: contact.type,
         value: contact.value,
         idCountry: contact.type === 'whatsapp' ? contact.idCountry : null,
+        localPrefix: contact.type === 'landline' ? contact.localPrefix : null,
+        extension: contact.type === 'landline' ? contact.extension || null : null,
         label: contact.label || null,
       }));
 
@@ -955,7 +983,41 @@ async function submitForm() {
               Código de país
               <SearchableSelect v-model="contact.idCountry" :options="countryPhoneOptions" required />
             </label>
-            <label class="text-sm">
+            <template v-if="contact.type === 'landline'">
+              <label class="text-sm">
+                Prefijo local
+                <input
+                  v-model="contact.localPrefix"
+                  required
+                  type="tel"
+                  inputmode="numeric"
+                  placeholder="601"
+                  class="mt-1 w-full rounded-md border border-black/15 px-3 py-2"
+                />
+              </label>
+              <label class="text-sm">
+                Número de teléfono
+                <input
+                  v-model="contact.value"
+                  required
+                  type="tel"
+                  inputmode="numeric"
+                  placeholder="1234567"
+                  class="mt-1 w-full rounded-md border border-black/15 px-3 py-2"
+                />
+              </label>
+              <label class="text-sm">
+                Extensión (opcional)
+                <input
+                  v-model="contact.extension"
+                  type="tel"
+                  inputmode="numeric"
+                  placeholder="101"
+                  class="mt-1 w-full rounded-md border border-black/15 px-3 py-2"
+                />
+              </label>
+            </template>
+            <label v-else class="text-sm">
               {{ contact.type === 'email' ? 'Email' : 'Teléfono' }}
               <input v-model="contact.value" required :type="contact.type === 'email' ? 'email' : 'tel'"
                 :placeholder="contact.type === 'email' ? 'correo@ejemplo.com' : '3001234567'"

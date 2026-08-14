@@ -86,6 +86,7 @@ const locationForm = reactive({
 const contactTypeOptions = [
   { value: 'whatsapp', label: 'WhatsApp' },
   { value: 'email', label: 'Email' },
+  { value: 'landline', label: 'Teléfono fijo' },
 ];
 
 const countryPhoneOptions = computed(() =>
@@ -106,9 +107,11 @@ const offerForm = reactive({
 });
 
 const contactForm = reactive({
-  type: 'whatsapp' as 'whatsapp' | 'email',
+  type: 'whatsapp' as 'whatsapp' | 'email' | 'landline',
   value: '',
   idCountry: 0,
+  localPrefix: '',
+  extension: '',
   label: '',
 });
 
@@ -739,10 +742,14 @@ async function submitContact() {
       type: contactForm.type,
       value: contactForm.value,
       idCountry: contactForm.type === 'whatsapp' ? contactForm.idCountry : null,
+      localPrefix: contactForm.type === 'landline' ? contactForm.localPrefix : null,
+      extension: contactForm.type === 'landline' ? contactForm.extension || null : null,
       label: contactForm.label || null,
     });
     await acopiosStore.fetchAcopio(idAcopio.value);
     contactForm.value = '';
+    contactForm.localPrefix = '';
+    contactForm.extension = '';
     contactForm.label = '';
     message.value = 'Contacto agregado';
   } catch (error: any) {
@@ -795,18 +802,12 @@ async function removeContact(idContact: number) {
         </p>
       </div>
       <div class="flex flex-wrap gap-2">
-        <RouterLink
-          :to="`/acopios/${idAcopio}`"
-          class="nav-btn"
-        >
+        <RouterLink :to="`/acopios/${idAcopio}`" class="nav-btn">
           Ver
         </RouterLink>
-        <button
-          v-if="acopiosStore.currentAcopio.openingMode !== 'scheduled'"
-          type="button"
+        <button v-if="acopiosStore.currentAcopio.openingMode !== 'scheduled'" type="button"
           class="inline-flex h-9 min-w-[8.5rem] items-center justify-center rounded-md bg-[#c45c26] px-3 text-sm text-white hover:bg-[#a34b1f]"
-          @click="toggleStatus"
-        >
+          @click="toggleStatus">
           {{ acopiosStore.currentAcopio.status === 'open' ? 'Cerrar acopio' : 'Abrir acopio' }}
         </button>
       </div>
@@ -817,467 +818,396 @@ async function removeContact(idContact: number) {
 
     <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
       <div class="flex min-w-0 flex-1 flex-col gap-6">
-      <form class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4" @submit.prevent="submitInfo">
-        <h2 class="text-lg font-semibold">Información del acopio</h2>
-        <label class="block text-sm">
-          Nombre
-          <input v-model="infoForm.name" required class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
-        </label>
-        <label class="block text-sm">
-          Descripción (opcional)
-          <textarea v-model="infoForm.description" rows="3" class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
-        </label>
-        <label class="block text-sm">
-          Responsable
-          <input v-model="infoForm.responsibleName" required class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
-        </label>
-        <label class="block text-sm">
-          Acopio habilitado
-          <SearchableSelect v-model="infoForm.openingMode" :options="openingModeOptions" required />
-        </label>
-        <div v-if="infoForm.openingMode === 'scheduled'" class="grid gap-3 md:grid-cols-2">
-          <label class="text-sm">
-            Inicio
-            <input v-model="infoForm.startsAt" type="date" required class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+        <form class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4" @submit.prevent="submitInfo">
+          <h2 class="text-lg font-semibold">Información del acopio</h2>
+          <label class="block text-sm">
+            Nombre
+            <input v-model="infoForm.name" required class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
           </label>
-          <label class="text-sm">
-            Fecha de cierre
-            <input
-              v-model="infoForm.endsAt"
-              type="date"
-              :min="infoForm.startsAt || undefined"
-              required
-              class="mt-1 w-full rounded-md border border-black/15 px-3 py-2"
-            />
+          <label class="block text-sm">
+            Descripción (opcional)
+            <textarea v-model="infoForm.description" rows="3"
+              class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
           </label>
-          <p class="text-sm text-black/60 md:col-span-2">
-            Al llegar a la fecha de cierre el acopio se cierra automáticamente.
-          </p>
-        </div>
-        <button type="submit" class="nav-btn nav-btn-primary" :disabled="savingInfo">
-          Guardar información
-        </button>
-      </form>
-
-      <section class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4">
-        <img
-          v-if="acopiosStore.currentAcopio.avatarUrl"
-          :src="resolveMediaUrl(acopiosStore.currentAcopio.avatarUrl)"
-          alt="Foto actual"
-          class="h-16 w-16 rounded-full object-cover"
-        />
-        <AvatarCropper v-model="avatarBlob" :preview-name="acopiosStore.currentAcopio.name" />
-      </section>
-
-      <form class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4" @submit.prevent="submitNeed">
-        <h2 class="text-lg font-semibold">Necesitamos (recaudo)</h2>
-        <p class="text-sm text-black/60">
-          Agrégalos manualmente o con Excel.
-        </p>
-        <ExcelImportPanel
-          template-type="needs"
-          :id-acopio="idAcopio"
-          @imported="message = `Se importaron ${$event} registro(s)`"
-          @error="errorMessage = ''"
-          @success="errorMessage = ''"
-        />
-        <template v-if="productNeedGroups.length">
-          <h3 class="text-sm font-semibold text-[#1f6f5b]">Productos</h3>
-          <div v-for="subgroup in productNeedGroups" :key="subgroup.key">
-            <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-black/45">
-              {{ subgroup.title }}
+          <label class="block text-sm">
+            Responsable
+            <input v-model="infoForm.responsibleName" required
+              class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+          </label>
+          <label class="block text-sm">
+            Acopio habilitado
+            <SearchableSelect v-model="infoForm.openingMode" :options="openingModeOptions" required />
+          </label>
+          <div v-if="infoForm.openingMode === 'scheduled'" class="grid gap-3 md:grid-cols-2">
+            <label class="text-sm">
+              Inicio
+              <input v-model="infoForm.startsAt" type="date" required
+                class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+            </label>
+            <label class="text-sm">
+              Fecha de cierre
+              <input v-model="infoForm.endsAt" type="date" :min="infoForm.startsAt || undefined" required
+                class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+            </label>
+            <p class="text-sm text-black/60 md:col-span-2">
+              Al llegar a la fecha de cierre el acopio se cierra automáticamente.
             </p>
-            <ManageListSection
-              :items="subgroup.items"
-              :title="subgroup.title"
-              empty-message="Aún no hay productos en esta categoría."
-            >
-              <template #item="{ item: need }">
-                <div class="inline-flex max-w-full items-center gap-2 rounded-md border border-black/10 bg-white px-2.5 py-2">
-                  <div class="flex min-w-0 items-center gap-2">
-                    <NeedIcon :icon-key="need.iconKey" :size="24" />
-                    <div class="min-w-0">
-                      <p class="font-medium">{{ need.name }}</p>
-                      <p v-if="need.hasLimit" class="text-sm text-black/60">
-                        {{ formatThousands(need.targetQuantity) }}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    class="shrink-0 rounded-md border border-[#c45c26] px-2 py-1 text-xs text-[#c45c26]"
-                    @click="removeNeed(need.id)"
-                  >
-                    Eliminar
-                  </button>
-                </div>
-              </template>
-            </ManageListSection>
           </div>
-        </template>
-        <template v-else>
-          <h3 class="text-sm font-semibold text-[#1f6f5b]">Productos</h3>
-          <ManageListSection
-            :items="currentProductNeeds"
-            title="Productos"
-            empty-message="Aún no hay productos. Agrégalos manualmente o con Excel."
-          />
-        </template>
+          <button type="submit" class="nav-btn nav-btn-primary" :disabled="savingInfo">
+            Guardar información
+          </button>
+        </form>
 
-        <h3 class="text-sm font-semibold text-[#1f6f5b]">Talento</h3>
-        <ManageListSection
-          :items="currentTalentNeeds"
-          title="Talento"
-          empty-message="Aún no hay talentos. Agrégalos manualmente o con Excel."
-        >
-          <template #item="{ item: need }">
-            <div class="inline-flex max-w-full items-center gap-2 rounded-md border border-black/10 bg-white px-2.5 py-2">
-              <div class="flex min-w-0 items-center gap-2">
-                <NeedIcon :icon-key="need.iconKey" :size="24" />
+        <section class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4">
+          <img v-if="acopiosStore.currentAcopio.avatarUrl" :src="resolveMediaUrl(acopiosStore.currentAcopio.avatarUrl)"
+            alt="Foto actual" class="h-16 w-16 rounded-full object-cover" />
+          <AvatarCropper v-model="avatarBlob" :preview-name="acopiosStore.currentAcopio.name" />
+        </section>
+
+        <form class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4" @submit.prevent="submitNeed">
+          <h2 class="text-lg font-semibold">Necesitamos (recaudo)</h2>
+          <p class="text-sm text-black/60">
+            Agrégalos manualmente o con Excel.
+          </p>
+          <ExcelImportPanel template-type="needs" :id-acopio="idAcopio"
+            @imported="message = `Se importaron ${$event} registro(s)`" @error="errorMessage = ''"
+            @success="errorMessage = ''" />
+          <template v-if="productNeedGroups.length">
+            <h3 class="text-sm font-semibold text-[#1f6f5b]">Productos</h3>
+            <div v-for="subgroup in productNeedGroups" :key="subgroup.key">
+              <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-black/45">
+                {{ subgroup.title }}
+              </p>
+              <ManageListSection :items="subgroup.items" :title="subgroup.title"
+                empty-message="Aún no hay productos en esta categoría.">
+                <template #item="{ item: need }">
+                  <div
+                    class="inline-flex max-w-full items-center gap-2 rounded-md border border-black/10 bg-white px-2.5 py-2">
+                    <div class="flex min-w-0 items-center gap-2">
+                      <NeedIcon :icon-key="need.iconKey" :size="24" />
+                      <div class="min-w-0">
+                        <p class="font-medium">{{ need.name }}</p>
+                        <p v-if="need.hasLimit" class="text-sm text-black/60">
+                          {{ formatThousands(need.targetQuantity) }}
+                        </p>
+                      </div>
+                    </div>
+                    <button type="button"
+                      class="shrink-0 rounded-md border border-[#c45c26] px-2 py-1 text-xs text-[#c45c26]"
+                      @click="removeNeed(need.id)">
+                      Eliminar
+                    </button>
+                  </div>
+                </template>
+              </ManageListSection>
+            </div>
+          </template>
+          <template v-else>
+            <h3 class="text-sm font-semibold text-[#1f6f5b]">Productos</h3>
+            <ManageListSection :items="currentProductNeeds" title="Productos"
+              empty-message="Aún no hay productos. Agrégalos manualmente o con Excel." />
+          </template>
+
+          <h3 class="text-sm font-semibold text-[#1f6f5b]">Talento</h3>
+          <ManageListSection :items="currentTalentNeeds" title="Talento"
+            empty-message="Aún no hay talentos. Agrégalos manualmente o con Excel.">
+            <template #item="{ item: need }">
+              <div
+                class="inline-flex max-w-full items-center gap-2 rounded-md border border-black/10 bg-white px-2.5 py-2">
+                <div class="flex min-w-0 items-center gap-2">
+                  <NeedIcon :icon-key="need.iconKey" :size="24" />
+                  <div class="min-w-0">
+                    <p class="font-medium">{{ need.name }}</p>
+                    <p class="text-sm text-black/60">
+                      {{ getNeedTypeLabel(need.needType) }}
+                      <template v-if="need.hasLimit">
+                        · {{ formatThousands(need.targetQuantity) }}
+                      </template>
+                    </p>
+                  </div>
+                </div>
+                <button type="button"
+                  class="shrink-0 rounded-md border border-[#c45c26] px-2 py-1 text-xs text-[#c45c26]"
+                  @click="removeNeed(need.id)">
+                  Eliminar
+                </button>
+              </div>
+            </template>
+          </ManageListSection>
+
+          <h3 class="text-sm font-semibold text-[#1f6f5b]">Donaciones</h3>
+          <p class="text-sm text-black/60">
+            Las donaciones se agregan manualmente (máx. {{ MAX_MONEY_NEEDS }}).
+          </p>
+          <ManageListSection :items="currentMoneyNeeds" title="Donaciones" empty-message="Aún no hay donaciones.">
+            <template #item="{ item: need }">
+              <div
+                class="inline-flex max-w-full items-center gap-2 rounded-md border border-black/10 bg-white px-2.5 py-2">
+                <div class="flex min-w-0 items-center gap-2">
+                  <NeedIcon :icon-key="need.iconKey" :size="24" />
+                  <div class="min-w-0">
+                    <p class="font-medium">{{ need.name }}</p>
+                    <p class="text-sm text-black/60">
+                      Donación
+                      <template v-if="need.hasLimit">
+                        · {{ formatThousands(need.targetQuantity) }}
+                      </template>
+                    </p>
+                  </div>
+                </div>
+                <button type="button"
+                  class="shrink-0 rounded-md border border-[#c45c26] px-2 py-1 text-xs text-[#c45c26]"
+                  @click="removeNeed(need.id)">
+                  Eliminar
+                </button>
+              </div>
+            </template>
+          </ManageListSection>
+          <h3 class="text-sm font-medium text-black/70">Agregar necesidad</h3>
+          <SearchableSelect :model-value="needForm.needType" :options="needTypeSelectOptions" required
+            @update:model-value="(nextType) => onNeedTypeChange(nextType as NeedType)" />
+          <label v-if="needForm.needType === 'product'" class="text-sm">
+            Categoría (opcional)
+            <SearchableSelect v-model="needForm.categoryKey" :options="productCategoryOptions"
+              placeholder="Selecciona" />
+          </label>
+          <label class="text-sm">
+            {{ getNeedNameLabel(needForm.needType) }}
+            <input v-model="needForm.name" required class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+          </label>
+          <NeedIconPicker v-model="needForm.iconKey" :need-type="needForm.needType" />
+          <label class="text-sm">
+            Descripción (opcional)
+            <textarea v-model="needForm.description" rows="2"
+              class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+          </label>
+          <label class="flex items-center gap-2 text-sm">
+            <input v-model="needForm.hasLimit" type="checkbox" />
+            Tiene límite
+          </label>
+          <label v-if="needForm.hasLimit" class="block text-sm">
+            Cantidad
+            <input :value="formatThousands(needForm.targetQuantity)" type="text" inputmode="numeric" required
+              class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" @input="onNeedQuantityInput" />
+          </label>
+          <template v-if="needForm.needType === 'money'">
+            <input v-model="needForm.bankName" required placeholder="Nombre del banco"
+              class="w-full rounded-md border border-black/15 px-3 py-2" />
+            <input v-model="needForm.accountNumber" required placeholder="Número de cuenta"
+              class="w-full rounded-md border border-black/15 px-3 py-2" />
+            <label class="text-sm">
+              Propietario (opcional)
+              <input v-model="needForm.accountHolder" class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+            </label>
+            <label class="text-sm">
+              Tipo de documento (opcional)
+              <SearchableSelect v-model="needForm.documentType" :options="documentTypeOptions"
+                placeholder="Selecciona" />
+            </label>
+            <label class="text-sm">
+              Número de documento (opcional)
+              <input v-model="needForm.documentNumber"
+                class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+            </label>
+            <QrCropper v-model="needForm.qrFile" />
+          </template>
+          <button type="submit" class="rounded-md bg-[#1f6f5b] px-3 py-2 text-white">Guardar necesidad</button>
+        </form>
+
+        <form class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4" @submit.prevent="submitContact">
+          <h2 class="text-lg font-semibold">Contactos</h2>
+          <ManageListSection :items="currentContacts" title="Contactos" empty-message="Aún no hay contactos.">
+            <template #item="{ item: contact }">
+              <div
+                class="inline-flex max-w-full items-center gap-2 rounded-md border border-black/10 bg-white px-2.5 py-2">
                 <div class="min-w-0">
-                  <p class="font-medium">{{ need.name }}</p>
+                  <p class="font-medium">
+                    {{
+                      contact.type === 'whatsapp'
+                        ? 'WhatsApp'
+                        : contact.type === 'landline'
+                          ? 'Teléfono fijo'
+                          : 'Email'
+                    }}
+                    <span v-if="contact.label" class="font-normal text-black/50"> · {{ contact.label }}</span>
+                  </p>
                   <p class="text-sm text-black/60">
-                    {{ getNeedTypeLabel(need.needType) }}
-                    <template v-if="need.hasLimit">
-                      · {{ formatThousands(need.targetQuantity) }}
+                    <template v-if="contact.type === 'whatsapp'">
+                      {{ contact.phoneCode }} {{ contact.value }}
                     </template>
+                    <template v-else-if="contact.type === 'landline'">
+                      ({{ contact.localPrefix }}) {{ contact.value }}
+                      <span v-if="contact.extension"> ext. {{ contact.extension }}</span>
+                    </template>
+                    <template v-else>{{ contact.value }}</template>
                   </p>
                 </div>
+                <button type="button"
+                  class="shrink-0 rounded-md border border-[#c45c26] px-2 py-1 text-xs text-[#c45c26]"
+                  @click="removeContact(contact.id)">
+                  Eliminar
+                </button>
               </div>
-              <button
-                type="button"
-                class="shrink-0 rounded-md border border-[#c45c26] px-2 py-1 text-xs text-[#c45c26]"
-                @click="removeNeed(need.id)"
-              >
-                Eliminar
-              </button>
-            </div>
-          </template>
-        </ManageListSection>
-
-        <h3 class="text-sm font-semibold text-[#1f6f5b]">Donaciones</h3>
-        <p class="text-sm text-black/60">
-          Las donaciones se agregan manualmente (máx. {{ MAX_MONEY_NEEDS }}).
-        </p>
-        <ManageListSection
-          :items="currentMoneyNeeds"
-          title="Donaciones"
-          empty-message="Aún no hay donaciones."
-        >
-          <template #item="{ item: need }">
-            <div class="inline-flex max-w-full items-center gap-2 rounded-md border border-black/10 bg-white px-2.5 py-2">
-              <div class="flex min-w-0 items-center gap-2">
-                <NeedIcon :icon-key="need.iconKey" :size="24" />
-                <div class="min-w-0">
-                  <p class="font-medium">{{ need.name }}</p>
-                  <p class="text-sm text-black/60">
-                    Donación
-                    <template v-if="need.hasLimit">
-                      · {{ formatThousands(need.targetQuantity) }}
-                    </template>
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                class="shrink-0 rounded-md border border-[#c45c26] px-2 py-1 text-xs text-[#c45c26]"
-                @click="removeNeed(need.id)"
-              >
-                Eliminar
-              </button>
-            </div>
-          </template>
-        </ManageListSection>
-        <h3 class="text-sm font-medium text-black/70">Agregar necesidad</h3>
-        <SearchableSelect
-          :model-value="needForm.needType"
-          :options="needTypeSelectOptions"
-          required
-          @update:model-value="(nextType) => onNeedTypeChange(nextType as NeedType)"
-        />
-        <label v-if="needForm.needType === 'product'" class="text-sm">
-          Categoría (opcional)
-          <SearchableSelect v-model="needForm.categoryKey" :options="productCategoryOptions" placeholder="Selecciona" />
-        </label>
-        <label class="text-sm">
-          {{ getNeedNameLabel(needForm.needType) }}
-          <input
-            v-model="needForm.name"
-            required
-            class="mt-1 w-full rounded-md border border-black/15 px-3 py-2"
-          />
-        </label>
-        <NeedIconPicker v-model="needForm.iconKey" :need-type="needForm.needType" />
-        <label class="text-sm">
-          Descripción (opcional)
-          <textarea
-            v-model="needForm.description"
-            rows="2"
-            class="mt-1 w-full rounded-md border border-black/15 px-3 py-2"
-          />
-        </label>
-        <label class="flex items-center gap-2 text-sm">
-          <input v-model="needForm.hasLimit" type="checkbox" />
-          Tiene límite
-        </label>
-        <label v-if="needForm.hasLimit" class="block text-sm">
-          Cantidad
-          <input
-            :value="formatThousands(needForm.targetQuantity)"
-            type="text"
-            inputmode="numeric"
-            required
-            class="mt-1 w-full rounded-md border border-black/15 px-3 py-2"
-            @input="onNeedQuantityInput"
-          />
-        </label>
-        <template v-if="needForm.needType === 'money'">
-          <input v-model="needForm.bankName" required placeholder="Nombre del banco" class="w-full rounded-md border border-black/15 px-3 py-2" />
-          <input v-model="needForm.accountNumber" required placeholder="Número de cuenta" class="w-full rounded-md border border-black/15 px-3 py-2" />
-          <label class="text-sm">
-            Propietario (opcional)
-            <input v-model="needForm.accountHolder" class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
-          </label>
-          <label class="text-sm">
-            Tipo de documento (opcional)
-            <SearchableSelect
-              v-model="needForm.documentType"
-              :options="documentTypeOptions"
-              placeholder="Selecciona"
-            />
-          </label>
-          <label class="text-sm">
-            Número de documento (opcional)
-            <input v-model="needForm.documentNumber" class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
-          </label>
-          <QrCropper v-model="needForm.qrFile" />
-        </template>
-        <button type="submit" class="rounded-md bg-[#1f6f5b] px-3 py-2 text-white">Guardar necesidad</button>
-      </form>
-
-      <form class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4" @submit.prevent="submitContact">
-        <h2 class="text-lg font-semibold">Contactos</h2>
-        <ManageListSection
-          :items="currentContacts"
-          title="Contactos"
-          empty-message="Aún no hay contactos."
-        >
-          <template #item="{ item: contact }">
-            <div class="inline-flex max-w-full items-center gap-2 rounded-md border border-black/10 bg-white px-2.5 py-2">
-              <div class="min-w-0">
-                <p class="font-medium">
-                  {{ contact.type === 'whatsapp' ? 'WhatsApp' : 'Email' }}
-                  <span v-if="contact.label" class="font-normal text-black/50"> · {{ contact.label }}</span>
-                </p>
-                <p class="text-sm text-black/60">
-                  <template v-if="contact.type === 'whatsapp'">
-                    {{ contact.phoneCode }} {{ contact.value }}
-                  </template>
-                  <template v-else>{{ contact.value }}</template>
-                </p>
-              </div>
-              <button
-                type="button"
-                class="shrink-0 rounded-md border border-[#c45c26] px-2 py-1 text-xs text-[#c45c26]"
-                @click="removeContact(contact.id)"
-              >
-                Eliminar
-              </button>
-            </div>
-          </template>
-        </ManageListSection>
-        <h3 class="text-sm font-medium text-black/70">Agregar contacto</h3>
-        <SearchableSelect
-          v-model="contactForm.type"
-          :options="contactTypeOptions"
-          required
-        />
-        <SearchableSelect
-          v-if="contactForm.type === 'whatsapp'"
-          v-model="contactForm.idCountry"
-          :options="countryPhoneOptions"
-          placeholder="Código de país"
-          required
-        />
-        <input
-          v-model="contactForm.value"
-          required
-          :type="contactForm.type === 'email' ? 'email' : 'tel'"
-          :placeholder="contactForm.type === 'email' ? 'Email' : 'Teléfono'"
-          class="w-full rounded-md border border-black/15 px-3 py-2"
-        />
-        <input
-          v-model="contactForm.label"
-          placeholder="Nombre contacto (opcional)"
-          class="w-full rounded-md border border-black/15 px-3 py-2"
-        />
-        <button type="submit" class="rounded-md bg-[#1f6f5b] px-3 py-2 text-white">Guardar contacto</button>
-      </form>
+            </template>
+          </ManageListSection>
+          <h3 class="text-sm font-medium text-black/70">Agregar contacto</h3>
+          <SearchableSelect v-model="contactForm.type" :options="contactTypeOptions" required />
+          <SearchableSelect v-if="contactForm.type === 'whatsapp'" v-model="contactForm.idCountry"
+            :options="countryPhoneOptions" placeholder="Código de país" required />
+          <input v-if="contactForm.type === 'landline'" v-model="contactForm.localPrefix" required type="tel"
+            inputmode="numeric" placeholder="Prefijo local EJ: 604"
+            class="w-full rounded-md border border-black/15 px-3 py-2" />
+          <input v-model="contactForm.value" required :type="contactForm.type === 'email' ? 'email' : 'tel'"
+            :placeholder="contactForm.type === 'email'
+                ? 'Email'
+                : contactForm.type === 'landline'
+                  ? 'Número de teléfono'
+                  : 'Teléfono'
+              " class="w-full rounded-md border border-black/15 px-3 py-2" />
+          <input v-if="contactForm.type === 'landline'" v-model="contactForm.extension" type="tel" inputmode="numeric"
+            placeholder="Extensión (opcional)" class="w-full rounded-md border border-black/15 px-3 py-2" />
+          <input v-model="contactForm.label" placeholder="Nombre contacto (opcional)"
+            class="w-full rounded-md border border-black/15 px-3 py-2" />
+          <button type="submit" class="rounded-md bg-[#1f6f5b] px-3 py-2 text-white">Guardar contacto</button>
+        </form>
       </div>
 
       <div class="flex min-w-0 flex-1 flex-col gap-6">
-      <form class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4" @submit.prevent="submitLocation">
-        <h2 class="text-lg font-semibold">Ubicación</h2>
-        <div class="grid gap-3 md:grid-cols-3">
-          <label class="text-sm">
-            País
-            <SearchableSelect v-model="locationForm.idCountry" :options="countryOptions" required />
-          </label>
-          <label class="text-sm">
-            Departamento
-            <SearchableSelect v-model="locationForm.idDepartment" :options="departmentOptions" placeholder="Selecciona" required />
-          </label>
-          <label class="text-sm">
-            Ciudad
-            <SearchableSelect v-model="locationForm.idCity" :options="cityOptions" placeholder="Selecciona" required />
-          </label>
-        </div>
-        <label class="block text-sm">
-          Dirección
-          <input
-            v-model="locationForm.street"
-            required
-            class="mt-1 w-full rounded-md border border-black/15 px-3 py-2"
-            @blur="onAddressBlur"
-          />
-        </label>
-        <div class="grid gap-3 md:grid-cols-2">
-          <label class="text-sm">
-            Barrio (opcional)
-            <input v-model="locationForm.neighborhood" class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
-          </label>
-          <label class="text-sm">
-            Complemento (opcional)
-            <input v-model="locationForm.reference" class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
-          </label>
-        </div>
-        <p v-if="!mapsApiKey" class="text-xs text-[#c45c26]">
-          Configura `VITE_GOOGLE_MAPS_API_KEY` para ubicar el acopio en el mapa.
-        </p>
-        <template v-else-if="canShowLocationMap">
-          <p class="text-xs text-black/55">
-            Mueve el pin o toca el mapa para ajustar la ubicación. La dirección se
-            actualizará con la que indique Google Maps.
-          </p>
-          <p v-if="isGeocoding" class="text-xs text-black/50">Buscando dirección…</p>
-          <div
-            ref="mapElement"
-            class="h-[240px] w-full overflow-hidden rounded-xl border border-black/10 bg-[#d9e8ef]"
-          />
-          <p v-if="mapError" class="text-xs text-[#c45c26]">{{ mapError }}</p>
-          <p v-else class="text-xs text-black/45">
-            Coordenadas: {{ locationForm.latitude.toFixed(6) }}, {{ locationForm.longitude.toFixed(6) }}
-          </p>
-        </template>
-        <p v-else-if="mapError" class="text-xs text-[#c45c26]">{{ mapError }}</p>
-        <p v-else class="text-xs text-black/45">
-          Escribe la dirección y sal del campo para buscarla en el mapa.
-        </p>
-        <button type="submit" class="nav-btn nav-btn-primary" :disabled="savingLocation">
-          Guardar ubicación
-        </button>
-      </form>
-
-      <section class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4">
-        <div>
-          <h2 class="text-lg font-semibold">Imágenes ({{ currentImages.length }}/{{ MAX_ACOPIO_GALLERY_IMAGES }}, opcional)</h2>
-          <p class="mt-1 text-sm text-black/60">
-            Formato vertical de celular (9:16). Resolución recomendada: 1080 × 1920 px,
-            para que se vean bien en el carrusel y la galería.
-          </p>
-        </div>
-        <div v-if="currentImages.length" class="grid grid-cols-3 gap-2">
-          <div v-for="image in currentImages" :key="image.id" class="relative">
-            <img
-              :src="resolveMediaUrl(image.imageUrl)"
-              :alt="`Imagen ${image.sortOrder}`"
-              class="aspect-[9/16] w-full rounded-md object-cover"
-            />
-            <button
-              type="button"
-              class="absolute right-1 top-1 rounded bg-black/70 px-2 py-0.5 text-xs text-white"
-              @click="removeImage(image.id)"
-            >
-              X
-            </button>
+        <form class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4" @submit.prevent="submitLocation">
+          <h2 class="text-lg font-semibold">Ubicación</h2>
+          <div class="grid gap-3 md:grid-cols-3">
+            <label class="text-sm">
+              País
+              <SearchableSelect v-model="locationForm.idCountry" :options="countryOptions" required />
+            </label>
+            <label class="text-sm">
+              Departamento
+              <SearchableSelect v-model="locationForm.idDepartment" :options="departmentOptions"
+                placeholder="Selecciona" required />
+            </label>
+            <label class="text-sm">
+              Ciudad
+              <SearchableSelect v-model="locationForm.idCity" :options="cityOptions" placeholder="Selecciona"
+                required />
+            </label>
           </div>
-        </div>
-        <hr class="border-black/10" />
-        <ImageDropzone
-          v-if="remainingImageSlots > 0"
-          v-model="pendingGalleryFiles"
-          :max-files="remainingImageSlots"
-        />
-        <p v-else class="text-sm text-black/50">Ya alcanzaste el máximo de {{ MAX_ACOPIO_GALLERY_IMAGES }} imágenes.</p>
-        <button
-          v-if="pendingGalleryFiles.length"
-          type="button"
-          class="rounded-md bg-[#1f6f5b] px-3 py-2 text-white"
-          @click="submitImages"
-        >
-          Subir {{ pendingGalleryFiles.length }} imagen(es)
-        </button>
-      </section>
-
-      <form class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4" @submit.prevent="submitOffer">
-        <h2 class="text-lg font-semibold">Estamos dando (opcional)</h2>
-        <p class="text-sm text-black/60">
-          Agrégalos manualmente o con Excel.
-        </p>
-        <ExcelImportPanel
-          template-type="offers"
-          :id-acopio="idAcopio"
-          @imported="message = `Se importaron ${$event} ayuda(s)`"
-          @error="errorMessage = ''"
-          @success="errorMessage = ''"
-        />
-        <template v-if="offerGroups.length">
-          <div v-for="group in offerGroups" :key="group.key">
-            <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-black/45">
-              {{ group.title }}
+          <label class="block text-sm">
+            Dirección
+            <input v-model="locationForm.street" required
+              class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" @blur="onAddressBlur" />
+          </label>
+          <div class="grid gap-3 md:grid-cols-2">
+            <label class="text-sm">
+              Barrio (opcional)
+              <input v-model="locationForm.neighborhood"
+                class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+            </label>
+            <label class="text-sm">
+              Complemento (opcional)
+              <input v-model="locationForm.reference" class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+            </label>
+          </div>
+          <p v-if="!mapsApiKey" class="text-xs text-[#c45c26]">
+            Configura `VITE_GOOGLE_MAPS_API_KEY` para ubicar el acopio en el mapa.
+          </p>
+          <template v-else-if="canShowLocationMap">
+            <p class="text-xs text-black/55">
+              Mueve el pin o toca el mapa para ajustar la ubicación. La dirección se
+              actualizará con la que indique Google Maps.
             </p>
-            <ManageListSection
-              :items="group.items"
-              :title="group.title"
-              empty-message="Aún no hay ayudas en esta categoría."
-            >
-              <template #item="{ item: offer }">
-                <div class="inline-flex max-w-full items-center gap-2 rounded-md border border-black/10 bg-white px-2.5 py-2">
-                  <div class="flex min-w-0 items-center gap-2">
-                    <NeedIcon :icon-key="offer.iconKey" :size="24" />
-                    <div class="min-w-0">
-                      <p class="font-medium">{{ offer.name }}</p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    class="shrink-0 rounded-md border border-[#c45c26] px-2 py-1 text-xs text-[#c45c26]"
-                    @click="removeOffer(offer.id)"
-                  >
-                    Eliminar
-                  </button>
-                </div>
-              </template>
-            </ManageListSection>
+            <p v-if="isGeocoding" class="text-xs text-black/50">Buscando dirección…</p>
+            <div ref="mapElement"
+              class="h-[240px] w-full overflow-hidden rounded-xl border border-black/10 bg-[#d9e8ef]" />
+            <p v-if="mapError" class="text-xs text-[#c45c26]">{{ mapError }}</p>
+            <p v-else class="text-xs text-black/45">
+              Coordenadas: {{ locationForm.latitude.toFixed(6) }}, {{ locationForm.longitude.toFixed(6) }}
+            </p>
+          </template>
+          <p v-else-if="mapError" class="text-xs text-[#c45c26]">{{ mapError }}</p>
+          <p v-else class="text-xs text-black/45">
+            Escribe la dirección y sal del campo para buscarla en el mapa.
+          </p>
+          <button type="submit" class="nav-btn nav-btn-primary" :disabled="savingLocation">
+            Guardar ubicación
+          </button>
+        </form>
+
+        <section class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4">
+          <div>
+            <h2 class="text-lg font-semibold">Imágenes ({{ currentImages.length }}/{{ MAX_ACOPIO_GALLERY_IMAGES }},
+              opcional)
+            </h2>
+            <p class="mt-1 text-sm text-black/60">
+              Formato vertical de celular (9:16). Resolución recomendada: 1080 × 1920 px,
+              para que se vean bien en el carrusel y la galería.
+            </p>
           </div>
-        </template>
-        <ManageListSection
-          v-else
-          :items="currentOffers"
-          title="Estamos dando"
-          empty-message="Aún no hay ayudas. Agrégalos manualmente o con Excel."
-        />
-        <h3 class="text-sm font-medium text-black/70">Agregar ayuda</h3>
-        <SearchableSelect
-          v-model="offerForm.category"
-          :options="offerCategoryOptions"
-          required
-        />
-        <input v-model="offerForm.name" required placeholder="Nombre" class="w-full rounded-md border border-black/15 px-3 py-2" />
-        <NeedIconPicker v-model="offerForm.iconKey" />
-        <textarea v-model="offerForm.description" rows="3" placeholder="Descripción (opcional)" class="w-full rounded-md border border-black/15 px-3 py-2" />
-        <button type="submit" class="rounded-md bg-[#1f6f5b] px-3 py-2 text-white">Publicar ayuda</button>
-      </form>
+          <div v-if="currentImages.length" class="grid grid-cols-3 gap-2">
+            <div v-for="image in currentImages" :key="image.id" class="relative">
+              <img :src="resolveMediaUrl(image.imageUrl)" :alt="`Imagen ${image.sortOrder}`"
+                class="aspect-[9/16] w-full rounded-md object-cover" />
+              <button type="button" class="absolute right-1 top-1 rounded bg-black/70 px-2 py-0.5 text-xs text-white"
+                @click="removeImage(image.id)">
+                X
+              </button>
+            </div>
+          </div>
+          <hr class="border-black/10" />
+          <ImageDropzone v-if="remainingImageSlots > 0" v-model="pendingGalleryFiles"
+            :max-files="remainingImageSlots" />
+          <p v-else class="text-sm text-black/50">Ya alcanzaste el máximo de {{ MAX_ACOPIO_GALLERY_IMAGES }} imágenes.
+          </p>
+          <button v-if="pendingGalleryFiles.length" type="button" class="rounded-md bg-[#1f6f5b] px-3 py-2 text-white"
+            @click="submitImages">
+            Subir {{ pendingGalleryFiles.length }} imagen(es)
+          </button>
+        </section>
+
+        <form class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4" @submit.prevent="submitOffer">
+          <h2 class="text-lg font-semibold">Estamos dando (opcional)</h2>
+          <p class="text-sm text-black/60">
+            Agrégalos manualmente o con Excel.
+          </p>
+          <ExcelImportPanel template-type="offers" :id-acopio="idAcopio"
+            @imported="message = `Se importaron ${$event} ayuda(s)`" @error="errorMessage = ''"
+            @success="errorMessage = ''" />
+          <template v-if="offerGroups.length">
+            <div v-for="group in offerGroups" :key="group.key">
+              <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-black/45">
+                {{ group.title }}
+              </p>
+              <ManageListSection :items="group.items" :title="group.title"
+                empty-message="Aún no hay ayudas en esta categoría.">
+                <template #item="{ item: offer }">
+                  <div
+                    class="inline-flex max-w-full items-center gap-2 rounded-md border border-black/10 bg-white px-2.5 py-2">
+                    <div class="flex min-w-0 items-center gap-2">
+                      <NeedIcon :icon-key="offer.iconKey" :size="24" />
+                      <div class="min-w-0">
+                        <p class="font-medium">{{ offer.name }}</p>
+                      </div>
+                    </div>
+                    <button type="button"
+                      class="shrink-0 rounded-md border border-[#c45c26] px-2 py-1 text-xs text-[#c45c26]"
+                      @click="removeOffer(offer.id)">
+                      Eliminar
+                    </button>
+                  </div>
+                </template>
+              </ManageListSection>
+            </div>
+          </template>
+          <ManageListSection v-else :items="currentOffers" title="Estamos dando"
+            empty-message="Aún no hay ayudas. Agrégalos manualmente o con Excel." />
+          <h3 class="text-sm font-medium text-black/70">Agregar ayuda</h3>
+          <SearchableSelect v-model="offerForm.category" :options="offerCategoryOptions" required />
+          <input v-model="offerForm.name" required placeholder="Nombre"
+            class="w-full rounded-md border border-black/15 px-3 py-2" />
+          <NeedIconPicker v-model="offerForm.iconKey" />
+          <textarea v-model="offerForm.description" rows="3" placeholder="Descripción (opcional)"
+            class="w-full rounded-md border border-black/15 px-3 py-2" />
+          <button type="submit" class="rounded-md bg-[#1f6f5b] px-3 py-2 text-white">Publicar ayuda</button>
+        </form>
       </div>
     </div>
   </section>
