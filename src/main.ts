@@ -24,10 +24,18 @@ async function registerServiceWorker() {
 
   registerSW({
     immediate: true,
+    onNeedRefresh() {
+      window.location.reload();
+    },
     onRegisteredSW(_swUrl, registration) {
-      if (registration) {
-        void registration.update();
+      if (!registration) {
+        return;
       }
+
+      void registration.update();
+      window.setInterval(() => {
+        void registration.update();
+      }, 60 * 1000);
     },
   });
 }
