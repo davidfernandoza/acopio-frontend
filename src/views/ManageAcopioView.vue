@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue';
-import { RouterLink, useRoute } from 'vue-router';
+import { RouterLink, useRoute, useRouter } from 'vue-router';
 import { useAcopiosStore } from '../stores/acopios';
 import { useGeoStore } from '../stores/geo';
 import {
   geocodeAddress,
+  reverseGeocode,
   renderEditableLocationMap,
 } from '../composables/useGoogleMaps';
 import AvatarCropper from '../components/AvatarCropper.vue';
@@ -14,16 +15,29 @@ import QrCropper from '../components/QrCropper.vue';
 import SearchableSelect from '../components/SearchableSelect.vue';
 import NeedIcon from '../components/NeedIcon.vue';
 import ManageListSection from '../components/ManageListSection.vue';
+import ExcelImportPanel from '../components/ExcelImportPanel.vue';
 import { resolveMediaUrl } from '../utils/media';
 import { formatThousands, parseThousandsInput } from '../utils/numberFormat';
 import {
   createEmptyNeedForm,
+  defaultProductCategoryKey,
+  defaultProductIconKey,
+  defaultTalentIconKey,
   documentTypeOptions,
+  getNeedNameLabel,
+  getNeedTypeLabel,
+  groupOffersByCategory,
+  groupProductsByCategory,
+  MAX_MONEY_NEEDS,
   needTypeOptions,
+  offerCategoryOptions,
+  productCategoryOptions,
   type NeedType,
 } from '../constants/needIcons';
+import { MAX_ACOPIO_GALLERY_IMAGES } from '../constants/uploads';
 
 const route = useRoute();
+const router = useRouter();
 const acopiosStore = useAcopiosStore();
 const geoStore = useGeoStore();
 const idAcopio = computed(() => Number(route.params.idAcopio));
@@ -42,18 +56,18 @@ const savingLocation = ref(false);
 let locationMap: google.maps.Map | null = null;
 let locationMarker: google.maps.Marker | null = null;
 let skipNextAddressGeocode = false;
+let reverseGeocodeRequestId = 0;
 
 const openingModeOptions = [
   { value: 'indefinite', label: 'Indefinidamente' },
   { value: 'scheduled', label: 'Cierre automático' },
-  { value: 'manual', label: 'Cierre manual' },
 ];
 
 const infoForm = reactive({
   name: '',
   description: '',
   responsibleName: '',
-  openingMode: 'indefinite' as 'indefinite' | 'scheduled' | 'manual',
+  openingMode: 'indefinite' as 'indefinite' | 'scheduled',
   startsAt: '',
   endsAt: '',
 });
@@ -68,13 +82,6 @@ const locationForm = reactive({
   latitude: 0,
   longitude: 0,
 });
-
-const offerCategoryOptions = [
-  { value: 'comida', label: 'Comida' },
-  { value: 'mercado', label: 'Mercado' },
-  { value: 'productos', label: 'Productos' },
-  { value: 'otro', label: 'Otro' },
-];
 
 const contactTypeOptions = [
   { value: 'whatsapp', label: 'WhatsApp' },
@@ -92,7 +99,7 @@ const needForm = reactive(createEmptyNeedForm());
 
 const offerForm = reactive({
   category: 'comida',
-  iconKey: 'comida',
+  iconKey: defaultProductIconKey,
   name: '',
   description: '',
   isAvailable: true,
@@ -108,12 +115,30 @@ const contactForm = reactive({
 const currentImages = computed(() => acopiosStore.currentAcopio?.images || []);
 const currentNeeds = computed(() => acopiosStore.currentAcopio?.needs || []);
 const currentOffers = computed(() => acopiosStore.currentAcopio?.offers || []);
+const offerGroups = computed(() => groupOffersByCategory(currentOffers.value));
 const currentContacts = computed(() => acopiosStore.currentAcopio?.contacts || []);
-const remainingImageSlots = computed(() => Math.max(0, 3 - currentImages.value.length));
-
-function offerCategoryLabel(category: string) {
-  return offerCategoryOptions.find((option) => option.value === category)?.label || category;
-}
+const remainingImageSlots = computed(() => Math.max(0, MAX_ACOPIO_GALLERY_IMAGES - currentImages.value.length));
+const moneyNeedsCount = computed(
+  () => currentNeeds.value.filter((need: { needType: string }) => need.needType === 'money').length
+);
+const currentProductNeeds = computed(() =>
+  currentNeeds.value.filter((need: { needType: string }) => need.needType === 'product')
+);
+const productNeedGroups = computed(() => groupProductsByCategory(currentProductNeeds.value));
+const currentTalentNeeds = computed(() =>
+  currentNeeds.value.filter((need: { needType: string }) => need.needType === 'talent')
+);
+const currentMoneyNeeds = computed(() =>
+  currentNeeds.value.filter((need: { needType: string }) => need.needType === 'money')
+);
+const canAddMoneyNeed = computed(
+  () => needForm.needType === 'money' || moneyNeedsCount.value < MAX_MONEY_NEEDS
+);
+const needTypeSelectOptions = computed(() =>
+  canAddMoneyNeed.value
+    ? needTypeOptions
+    : needTypeOptions.filter((option) => option.value !== 'money')
+);
 
 const countryOptions = computed(() =>
   geoStore.countries.map((country) => ({
@@ -158,7 +183,22 @@ const canShowLocationMap = computed(
     )
 );
 
-function toDateTimeLocal(isoValue: string | null) {
+function formatDisplayDate(isoValue: string | null) {
+  if (!isoValue) {
+    return '';
+  }
+  const parsedDate = new Date(isoValue);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return '';
+  }
+  return parsedDate.toLocaleDateString('es-CO', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  });
+}
+
+function toDateInputValue(isoValue: string | null) {
   if (!isoValue) {
     return '';
   }
@@ -167,14 +207,23 @@ function toDateTimeLocal(isoValue: string | null) {
     return '';
   }
   const timezoneOffsetMs = parsedDate.getTimezoneOffset() * 60_000;
-  return new Date(parsedDate.getTime() - timezoneOffsetMs).toISOString().slice(0, 16);
+  return new Date(parsedDate.getTime() - timezoneOffsetMs).toISOString().slice(0, 10);
 }
 
-function fromDateTimeLocal(localValue: string) {
-  if (!localValue) {
+function fromStartDateInput(dateValue: string) {
+  if (!dateValue) {
     return null;
   }
-  return new Date(localValue).toISOString();
+  const [year, month, day] = dateValue.split('-').map(Number);
+  return new Date(year, month - 1, day, 0, 0, 0, 0).toISOString();
+}
+
+function fromEndDateInput(dateValue: string) {
+  if (!dateValue) {
+    return null;
+  }
+  const [year, month, day] = dateValue.split('-').map(Number);
+  return new Date(year, month - 1, day, 23, 59, 59, 999).toISOString();
 }
 
 function fillInfoForm() {
@@ -185,9 +234,10 @@ function fillInfoForm() {
   infoForm.name = currentAcopio.name;
   infoForm.description = currentAcopio.description || '';
   infoForm.responsibleName = currentAcopio.responsibleName;
-  infoForm.openingMode = currentAcopio.openingMode;
-  infoForm.startsAt = toDateTimeLocal(currentAcopio.startsAt);
-  infoForm.endsAt = toDateTimeLocal(currentAcopio.endsAt);
+  infoForm.openingMode =
+    currentAcopio.openingMode === 'scheduled' ? 'scheduled' : 'indefinite';
+  infoForm.startsAt = toDateInputValue(currentAcopio.startsAt);
+  infoForm.endsAt = toDateInputValue(currentAcopio.endsAt);
 }
 
 async function fillLocationForm() {
@@ -246,6 +296,94 @@ function applyMapCoordinates(latitude: number, longitude: number) {
   }
 }
 
+function normalizeGeoName(name: string) {
+  return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function findGeoMatch<T extends { name: string }>(items: T[], candidateName: string) {
+  if (!candidateName) {
+    return undefined;
+  }
+  const normalizedCandidate = normalizeGeoName(candidateName);
+  return items.find((item) => {
+    const normalizedItem = normalizeGeoName(item.name);
+    return (
+      normalizedItem === normalizedCandidate ||
+      normalizedItem.startsWith(normalizedCandidate) ||
+      normalizedCandidate.startsWith(normalizedItem)
+    );
+  });
+}
+
+async function applyAddressFromMapCoordinates(latitude: number, longitude: number) {
+  const requestId = ++reverseGeocodeRequestId;
+  isGeocoding.value = true;
+  mapError.value = '';
+  skipNextAddressGeocode = true;
+
+  try {
+    const geocodedAddress = await reverseGeocode(latitude, longitude);
+    if (requestId !== reverseGeocodeRequestId) {
+      return;
+    }
+    if (!geocodedAddress) {
+      mapError.value = 'No se encontró una dirección para esa ubicación.';
+      return;
+    }
+
+    skipNextAddressGeocode = true;
+    locationForm.street = geocodedAddress.street;
+    if (geocodedAddress.neighborhood) {
+      locationForm.neighborhood = geocodedAddress.neighborhood;
+    }
+
+    const matchedCountry = findGeoMatch(geoStore.countries, geocodedAddress.countryName);
+    if (!matchedCountry) {
+      return;
+    }
+
+    skipLocationCascade.value = true;
+    try {
+      if (matchedCountry.id !== locationForm.idCountry) {
+        locationForm.idCountry = matchedCountry.id;
+        await geoStore.loadDepartments(matchedCountry.id);
+      }
+
+      const matchedDepartment =
+        findGeoMatch(geoStore.departments, geocodedAddress.departmentName) ||
+        findGeoMatch(geoStore.departments, geocodedAddress.cityName);
+      if (matchedDepartment && matchedDepartment.id !== locationForm.idDepartment) {
+        locationForm.idDepartment = matchedDepartment.id;
+        await geoStore.loadCities(matchedDepartment.id);
+      }
+
+      const matchedCity =
+        findGeoMatch(geoStore.cities, geocodedAddress.cityName) ||
+        findGeoMatch(geoStore.cities, geocodedAddress.departmentName);
+      if (matchedCity) {
+        locationForm.idCity = matchedCity.id;
+      }
+    } finally {
+      skipLocationCascade.value = false;
+    }
+  } catch (error: unknown) {
+    if (requestId !== reverseGeocodeRequestId) {
+      return;
+    }
+    const geocodeError = error as { message?: string };
+    mapError.value = geocodeError?.message || 'No se pudo obtener la dirección de Google Maps.';
+  } finally {
+    if (requestId === reverseGeocodeRequestId) {
+      isGeocoding.value = false;
+    }
+  }
+}
+
 async function ensureLocationMap() {
   if (!canShowLocationMap.value || !mapElement.value) {
     return;
@@ -268,6 +406,7 @@ async function ensureLocationMap() {
         skipNextAddressGeocode = true;
         locationForm.latitude = latitude;
         locationForm.longitude = longitude;
+        void applyAddressFromMapCoordinates(latitude, longitude);
       },
     });
     locationMap = editableMap.map;
@@ -350,14 +489,26 @@ async function onAddressBlur() {
 async function submitInfo() {
   savingInfo.value = true;
   errorMessage.value = '';
+  if (infoForm.openingMode === 'scheduled') {
+    if (!infoForm.startsAt || !infoForm.endsAt) {
+      errorMessage.value = 'Debes indicar fecha de inicio y cierre';
+      savingInfo.value = false;
+      return;
+    }
+    if (new Date(infoForm.endsAt) < new Date(infoForm.startsAt)) {
+      errorMessage.value = 'La fecha de cierre debe ser posterior a la de inicio';
+      savingInfo.value = false;
+      return;
+    }
+  }
   try {
     await acopiosStore.updateAcopio(idAcopio.value, {
       name: infoForm.name,
       description: infoForm.description || null,
       responsibleName: infoForm.responsibleName,
       openingMode: infoForm.openingMode,
-      startsAt: infoForm.openingMode === 'scheduled' ? fromDateTimeLocal(infoForm.startsAt) : null,
-      endsAt: infoForm.openingMode === 'scheduled' ? fromDateTimeLocal(infoForm.endsAt) : null,
+      startsAt: infoForm.openingMode === 'scheduled' ? fromStartDateInput(infoForm.startsAt) : null,
+      endsAt: infoForm.openingMode === 'scheduled' ? fromEndDateInput(infoForm.endsAt) : null,
     });
     fillInfoForm();
     message.value = 'Información actualizada';
@@ -402,7 +553,11 @@ onMounted(async () => {
   if (geoStore.countries.length) {
     contactForm.idCountry = geoStore.countries[0].id;
   }
-  await acopiosStore.fetchAcopio(idAcopio.value);
+  const acopio = await acopiosStore.fetchAcopio(idAcopio.value);
+  if (!acopio.canManage) {
+    await router.replace(`/acopios/${idAcopio.value}`);
+    return;
+  }
   fillInfoForm();
   await fillLocationForm();
 });
@@ -438,7 +593,7 @@ watch(
   () => infoForm.openingMode,
   (openingMode) => {
     if (openingMode === 'scheduled' && !infoForm.startsAt) {
-      infoForm.startsAt = toDateTimeLocal(new Date().toISOString());
+      infoForm.startsAt = toDateInputValue(new Date().toISOString());
     }
   }
 );
@@ -458,8 +613,14 @@ watch(avatarBlob, async (blob) => {
 async function toggleStatus() {
   if (!acopiosStore.currentAcopio) return;
   const nextStatus = acopiosStore.currentAcopio.status === 'open' ? 'closed' : 'open';
-  await acopiosStore.updateStatus(idAcopio.value, nextStatus);
-  message.value = `Acopio marcado como ${nextStatus === 'open' ? 'abierto' : 'cerrado'}`;
+  try {
+    await acopiosStore.updateStatus(idAcopio.value, nextStatus);
+    message.value = `Acopio marcado como ${nextStatus === 'open' ? 'abierto' : 'cerrado'}`;
+  } catch (error: unknown) {
+    const axiosError = error as { response?: { data?: { message?: string } } };
+    errorMessage.value =
+      axiosError?.response?.data?.message || 'No se pudo actualizar el estado';
+  }
 }
 
 async function submitImages() {
@@ -486,11 +647,16 @@ async function removeImage(idImage: number) {
 
 async function submitNeed() {
   errorMessage.value = '';
+  if (needForm.needType === 'money' && moneyNeedsCount.value >= MAX_MONEY_NEEDS) {
+    errorMessage.value = `Solo se permiten ${MAX_MONEY_NEEDS} registros de dinero por acopio`;
+    return;
+  }
   try {
     await acopiosStore.createNeed(
       idAcopio.value,
       {
         needType: needForm.needType,
+        categoryKey: needForm.needType === 'product' ? needForm.categoryKey || defaultProductCategoryKey : null,
         iconKey: needForm.needType === 'money' ? 'bank' : needForm.iconKey,
         name: needForm.name,
         description: needForm.description || null,
@@ -513,11 +679,29 @@ async function submitNeed() {
 }
 
 function onNeedTypeChange(nextType: NeedType) {
+  if (nextType === 'money' && needForm.needType !== 'money' && moneyNeedsCount.value >= MAX_MONEY_NEEDS) {
+    errorMessage.value = `Solo se permiten ${MAX_MONEY_NEEDS} registros de dinero por acopio`;
+    return;
+  }
   needForm.needType = nextType;
   if (nextType === 'money') {
     needForm.iconKey = 'bank';
-  } else if (needForm.iconKey === 'bank') {
-    needForm.iconKey = 'comida';
+    needForm.categoryKey = '';
+  } else if (nextType === 'talent') {
+    needForm.categoryKey = '';
+    if (needForm.iconKey === 'bank') {
+      needForm.iconKey = defaultTalentIconKey;
+    }
+    needForm.bankName = '';
+    needForm.accountNumber = '';
+    needForm.accountHolder = '';
+    needForm.documentType = '';
+    needForm.documentNumber = '';
+    needForm.qrFile = null;
+  } else {
+    if (needForm.iconKey === 'bank') {
+      needForm.iconKey = defaultProductIconKey;
+    }
     needForm.bankName = '';
     needForm.accountNumber = '';
     needForm.accountHolder = '';
@@ -541,7 +725,7 @@ async function submitOffer() {
     await acopiosStore.fetchAcopio(idAcopio.value);
     offerForm.name = '';
     offerForm.description = '';
-    offerForm.iconKey = 'comida';
+    offerForm.iconKey = defaultProductIconKey;
     message.value = 'Ayuda publicada';
   } catch (error: any) {
     errorMessage.value = error?.response?.data?.message || 'No se pudo publicar la ayuda';
@@ -604,6 +788,10 @@ async function removeContact(idContact: number) {
         <h1 class="text-3xl font-semibold">Gestionar {{ acopiosStore.currentAcopio.name }}</h1>
         <p class="text-sm text-black/60">
           Estado actual: {{ acopiosStore.currentAcopio.status === 'open' ? 'Abierto' : 'Cerrado' }}
+          <span v-if="acopiosStore.currentAcopio.openingMode === 'scheduled'">
+            · Se cierra automáticamente el
+            {{ formatDisplayDate(acopiosStore.currentAcopio.endsAt) || 'día de cierre' }}
+          </span>
         </p>
       </div>
       <div class="flex flex-wrap gap-2">
@@ -614,6 +802,7 @@ async function removeContact(idContact: number) {
           Ver
         </RouterLink>
         <button
+          v-if="acopiosStore.currentAcopio.openingMode !== 'scheduled'"
           type="button"
           class="inline-flex h-9 min-w-[8.5rem] items-center justify-center rounded-md bg-[#c45c26] px-3 text-sm text-white hover:bg-[#a34b1f]"
           @click="toggleStatus"
@@ -649,12 +838,21 @@ async function removeContact(idContact: number) {
         <div v-if="infoForm.openingMode === 'scheduled'" class="grid gap-3 md:grid-cols-2">
           <label class="text-sm">
             Inicio
-            <input v-model="infoForm.startsAt" type="datetime-local" required class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+            <input v-model="infoForm.startsAt" type="date" required class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
           </label>
           <label class="text-sm">
             Fecha de cierre
-            <input v-model="infoForm.endsAt" type="datetime-local" required class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+            <input
+              v-model="infoForm.endsAt"
+              type="date"
+              :min="infoForm.startsAt || undefined"
+              required
+              class="mt-1 w-full rounded-md border border-black/15 px-3 py-2"
+            />
           </label>
+          <p class="text-sm text-black/60 md:col-span-2">
+            Al llegar a la fecha de cierre el acopio se cierra automáticamente.
+          </p>
         </div>
         <button type="submit" class="nav-btn nav-btn-primary" :disabled="savingInfo">
           Guardar información
@@ -673,10 +871,64 @@ async function removeContact(idContact: number) {
 
       <form class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4" @submit.prevent="submitNeed">
         <h2 class="text-lg font-semibold">Necesitamos (recaudo)</h2>
+        <p class="text-sm text-black/60">
+          Agrégalos manualmente o con Excel.
+        </p>
+        <ExcelImportPanel
+          template-type="needs"
+          :id-acopio="idAcopio"
+          @imported="message = `Se importaron ${$event} registro(s)`"
+          @error="errorMessage = ''"
+          @success="errorMessage = ''"
+        />
+        <template v-if="productNeedGroups.length">
+          <h3 class="text-sm font-semibold text-[#1f6f5b]">Productos</h3>
+          <div v-for="subgroup in productNeedGroups" :key="subgroup.key">
+            <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-black/45">
+              {{ subgroup.title }}
+            </p>
+            <ManageListSection
+              :items="subgroup.items"
+              :title="subgroup.title"
+              empty-message="Aún no hay productos en esta categoría."
+            >
+              <template #item="{ item: need }">
+                <div class="inline-flex max-w-full items-center gap-2 rounded-md border border-black/10 bg-white px-2.5 py-2">
+                  <div class="flex min-w-0 items-center gap-2">
+                    <NeedIcon :icon-key="need.iconKey" :size="24" />
+                    <div class="min-w-0">
+                      <p class="font-medium">{{ need.name }}</p>
+                      <p v-if="need.hasLimit" class="text-sm text-black/60">
+                        {{ formatThousands(need.targetQuantity) }}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class="shrink-0 rounded-md border border-[#c45c26] px-2 py-1 text-xs text-[#c45c26]"
+                    @click="removeNeed(need.id)"
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              </template>
+            </ManageListSection>
+          </div>
+        </template>
+        <template v-else>
+          <h3 class="text-sm font-semibold text-[#1f6f5b]">Productos</h3>
+          <ManageListSection
+            :items="currentProductNeeds"
+            title="Productos"
+            empty-message="Aún no hay productos. Agrégalos manualmente o con Excel."
+          />
+        </template>
+
+        <h3 class="text-sm font-semibold text-[#1f6f5b]">Talento</h3>
         <ManageListSection
-          :items="currentNeeds"
-          title="Necesidades"
-          empty-message="Aún no hay necesidades. Agrega al menos una."
+          :items="currentTalentNeeds"
+          title="Talento"
+          empty-message="Aún no hay talentos. Agrégalos manualmente o con Excel."
         >
           <template #item="{ item: need }">
             <div class="inline-flex max-w-full items-center gap-2 rounded-md border border-black/10 bg-white px-2.5 py-2">
@@ -685,7 +937,41 @@ async function removeContact(idContact: number) {
                 <div class="min-w-0">
                   <p class="font-medium">{{ need.name }}</p>
                   <p class="text-sm text-black/60">
-                    {{ need.needType === 'money' ? 'Dinero' : 'Producto' }}
+                    {{ getNeedTypeLabel(need.needType) }}
+                    <template v-if="need.hasLimit">
+                      · {{ formatThousands(need.targetQuantity) }}
+                    </template>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                class="shrink-0 rounded-md border border-[#c45c26] px-2 py-1 text-xs text-[#c45c26]"
+                @click="removeNeed(need.id)"
+              >
+                Eliminar
+              </button>
+            </div>
+          </template>
+        </ManageListSection>
+
+        <h3 class="text-sm font-semibold text-[#1f6f5b]">Donaciones</h3>
+        <p class="text-sm text-black/60">
+          Las donaciones se agregan manualmente (máx. {{ MAX_MONEY_NEEDS }}).
+        </p>
+        <ManageListSection
+          :items="currentMoneyNeeds"
+          title="Donaciones"
+          empty-message="Aún no hay donaciones."
+        >
+          <template #item="{ item: need }">
+            <div class="inline-flex max-w-full items-center gap-2 rounded-md border border-black/10 bg-white px-2.5 py-2">
+              <div class="flex min-w-0 items-center gap-2">
+                <NeedIcon :icon-key="need.iconKey" :size="24" />
+                <div class="min-w-0">
+                  <p class="font-medium">{{ need.name }}</p>
+                  <p class="text-sm text-black/60">
+                    Donación
                     <template v-if="need.hasLimit">
                       · {{ formatThousands(need.targetQuantity) }}
                     </template>
@@ -705,12 +991,16 @@ async function removeContact(idContact: number) {
         <h3 class="text-sm font-medium text-black/70">Agregar necesidad</h3>
         <SearchableSelect
           :model-value="needForm.needType"
-          :options="needTypeOptions"
+          :options="needTypeSelectOptions"
           required
           @update:model-value="(nextType) => onNeedTypeChange(nextType as NeedType)"
         />
+        <label v-if="needForm.needType === 'product'" class="text-sm">
+          Categoría (opcional)
+          <SearchableSelect v-model="needForm.categoryKey" :options="productCategoryOptions" placeholder="Selecciona" />
+        </label>
         <label class="text-sm">
-          {{ needForm.needType === 'money' ? 'Nombre de la donación' : 'Nombre del producto' }}
+          {{ getNeedNameLabel(needForm.needType) }}
           <input
             v-model="needForm.name"
             required
@@ -866,10 +1156,10 @@ async function removeContact(idContact: number) {
         </p>
         <template v-else-if="canShowLocationMap">
           <p class="text-xs text-black/55">
-            Mueve el pin si la ubicación no coincide. Solo se guardarán latitud y longitud;
-            la dirección escrita no cambia.
+            Mueve el pin o toca el mapa para ajustar la ubicación. La dirección se
+            actualizará con la que indique Google Maps.
           </p>
-          <p v-if="isGeocoding" class="text-xs text-black/50">Buscando ubicación…</p>
+          <p v-if="isGeocoding" class="text-xs text-black/50">Buscando dirección…</p>
           <div
             ref="mapElement"
             class="h-[240px] w-full overflow-hidden rounded-xl border border-black/10 bg-[#d9e8ef]"
@@ -890,7 +1180,7 @@ async function removeContact(idContact: number) {
 
       <section class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4">
         <div>
-          <h2 class="text-lg font-semibold">Imágenes ({{ currentImages.length }}/3, opcional)</h2>
+          <h2 class="text-lg font-semibold">Imágenes ({{ currentImages.length }}/{{ MAX_ACOPIO_GALLERY_IMAGES }}, opcional)</h2>
           <p class="mt-1 text-sm text-black/60">
             Formato vertical de celular (9:16). Resolución recomendada: 1080 × 1920 px,
             para que se vean bien en el carrusel y la galería.
@@ -918,7 +1208,7 @@ async function removeContact(idContact: number) {
           v-model="pendingGalleryFiles"
           :max-files="remainingImageSlots"
         />
-        <p v-else class="text-sm text-black/50">Ya alcanzaste el máximo de 3 imágenes.</p>
+        <p v-else class="text-sm text-black/50">Ya alcanzaste el máximo de {{ MAX_ACOPIO_GALLERY_IMAGES }} imágenes.</p>
         <button
           v-if="pendingGalleryFiles.length"
           type="button"
@@ -931,30 +1221,52 @@ async function removeContact(idContact: number) {
 
       <form class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4" @submit.prevent="submitOffer">
         <h2 class="text-lg font-semibold">Estamos dando (opcional)</h2>
+        <p class="text-sm text-black/60">
+          Agrégalos manualmente o con Excel.
+        </p>
+        <ExcelImportPanel
+          template-type="offers"
+          :id-acopio="idAcopio"
+          @imported="message = `Se importaron ${$event} ayuda(s)`"
+          @error="errorMessage = ''"
+          @success="errorMessage = ''"
+        />
+        <template v-if="offerGroups.length">
+          <div v-for="group in offerGroups" :key="group.key">
+            <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-black/45">
+              {{ group.title }}
+            </p>
+            <ManageListSection
+              :items="group.items"
+              :title="group.title"
+              empty-message="Aún no hay ayudas en esta categoría."
+            >
+              <template #item="{ item: offer }">
+                <div class="inline-flex max-w-full items-center gap-2 rounded-md border border-black/10 bg-white px-2.5 py-2">
+                  <div class="flex min-w-0 items-center gap-2">
+                    <NeedIcon :icon-key="offer.iconKey" :size="24" />
+                    <div class="min-w-0">
+                      <p class="font-medium">{{ offer.name }}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    class="shrink-0 rounded-md border border-[#c45c26] px-2 py-1 text-xs text-[#c45c26]"
+                    @click="removeOffer(offer.id)"
+                  >
+                    Eliminar
+                  </button>
+                </div>
+              </template>
+            </ManageListSection>
+          </div>
+        </template>
         <ManageListSection
+          v-else
           :items="currentOffers"
           title="Estamos dando"
-          empty-message="Aún no hay ayudas publicadas."
-        >
-          <template #item="{ item: offer }">
-            <div class="inline-flex max-w-full items-center gap-2 rounded-md border border-black/10 bg-white px-2.5 py-2">
-              <div class="flex min-w-0 items-center gap-2">
-                <NeedIcon :icon-key="offer.iconKey" :size="24" />
-                <div class="min-w-0">
-                  <p class="font-medium">{{ offer.name }}</p>
-                  <p class="text-sm text-black/60">{{ offerCategoryLabel(offer.category) }}</p>
-                </div>
-              </div>
-              <button
-                type="button"
-                class="shrink-0 rounded-md border border-[#c45c26] px-2 py-1 text-xs text-[#c45c26]"
-                @click="removeOffer(offer.id)"
-              >
-                Eliminar
-              </button>
-            </div>
-          </template>
-        </ManageListSection>
+          empty-message="Aún no hay ayudas. Agrégalos manualmente o con Excel."
+        />
         <h3 class="text-sm font-medium text-black/70">Agregar ayuda</h3>
         <SearchableSelect
           v-model="offerForm.category"

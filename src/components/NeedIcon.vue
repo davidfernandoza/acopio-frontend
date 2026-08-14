@@ -35,12 +35,13 @@ const props = withDefaults(
     size?: number;
   }>(),
   {
-    iconKey: 'otro',
+    iconKey: 'caja',
     size: 22,
   },
 );
 
 const iconByKey: Record<string, Component> = {
+  caja: Package,
   comida: Soup,
   agua: Droplets,
   ropa: Shirt,
@@ -68,7 +69,7 @@ const iconByKey: Record<string, Component> = {
   bank: Landmark,
 };
 
-const iconComponent = computed(() => iconByKey[props.iconKey || ''] || Gift);
+const iconComponent = computed(() => iconByKey[props.iconKey || ''] || Package);
 </script>
 
 <template>

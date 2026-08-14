@@ -47,7 +47,10 @@ export interface AcopioContact {
 export interface AcopioNeed {
   id: number;
   idAcopio: number;
-  needType: 'product' | 'money';
+  needType: 'product' | 'money' | 'talent';
+  idCategory?: number | null;
+  categoryKey?: string | null;
+  categoryName?: string | null;
   iconKey: string;
   name: string;
   unit: string | null;
@@ -89,7 +92,7 @@ export interface Acopio {
   name: string;
   description: string | null;
   status: 'open' | 'closed';
-  openingMode: 'indefinite' | 'scheduled' | 'manual';
+  openingMode: 'indefinite' | 'scheduled';
   startsAt: string | null;
   endsAt: string | null;
   responsibleName: string;
@@ -114,6 +117,7 @@ export interface Acopio {
   offers?: AcopioOffer[];
   images?: AcopioImage[];
   owner?: AuthUser;
+  canManage?: boolean;
 }
 
 export interface CarouselSlide {

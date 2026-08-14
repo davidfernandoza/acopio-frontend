@@ -1,0 +1,1 @@
+export const MAX_ACOPIO_GALLERY_IMAGES = 9;

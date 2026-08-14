@@ -6,22 +6,28 @@ import { useAuthStore } from '../stores/auth';
 import { useGeoStore } from '../stores/geo';
 import {
   geocodeAddress,
+  reverseGeocode,
   renderEditableLocationMap,
 } from '../composables/useGoogleMaps';
 import AvatarCropper from '../components/AvatarCropper.vue';
 import ImageDropzone from '../components/ImageDropzone.vue';
 import NeedIconPicker from '../components/NeedIconPicker.vue';
 import QrCropper from '../components/QrCropper.vue';
+import ExcelImportPanel from '../components/ExcelImportPanel.vue';
 import SearchableSelect from '../components/SearchableSelect.vue';
 import { Plus } from '@lucide/vue';
 import {
   createEmptyNeedForm,
+  defaultProductCategoryKey,
+  defaultProductIconKey,
   documentTypeOptions,
-  needTypeOptions,
+  MAX_MONEY_NEEDS,
+  offerCategoryOptions,
+  productCategoryOptions,
   type NeedFormItem,
-  type NeedType,
 } from '../constants/needIcons';
 import { formatThousands, parseThousandsInput } from '../utils/numberFormat';
+import { MAX_ACOPIO_GALLERY_IMAGES } from '../constants/uploads';
 
 const router = useRouter();
 const acopiosStore = useAcopiosStore();
@@ -36,15 +42,17 @@ const mapElement = ref<HTMLElement | null>(null);
 const mapError = ref('');
 const isGeocoding = ref(false);
 const hasConfirmedAddress = ref(false);
+const skipLocationCascade = ref(false);
 let locationMap: google.maps.Map | null = null;
 let locationMarker: google.maps.Marker | null = null;
 let skipNextAddressGeocode = false;
+let reverseGeocodeRequestId = 0;
 
 const form = reactive({
   name: '',
   description: '',
   status: 'open' as 'open' | 'closed',
-  openingMode: 'indefinite' as 'indefinite' | 'scheduled' | 'manual',
+  openingMode: 'indefinite' as 'indefinite' | 'scheduled',
   startsAt: '',
   endsAt: '',
   responsibleName: authStore.user?.name || '',
@@ -102,7 +110,6 @@ const canShowLocationMap = computed(
 const openingModeOptions = [
   { value: 'indefinite', label: 'Indefinidamente' },
   { value: 'scheduled', label: 'Cierre automático' },
-  { value: 'manual', label: 'Cierre manual' },
 ];
 
 const contactTypeOptions = [
@@ -110,12 +117,27 @@ const contactTypeOptions = [
   { value: 'email', label: 'Email' },
 ];
 
-const offerCategoryOptions = [
-  { value: 'comida', label: 'Comida' },
-  { value: 'mercado', label: 'Mercado' },
-  { value: 'productos', label: 'Productos' },
-  { value: 'otro', label: 'Otro' },
-];
+const moneyNeedsCount = computed(
+  () => form.needs.filter((need) => need.needType === 'money').length
+);
+
+const productNeedEntries = computed(() =>
+  form.needs
+    .map((need, index) => ({ need, index }))
+    .filter((entry) => entry.need.needType === 'product')
+);
+
+const talentNeedEntries = computed(() =>
+  form.needs
+    .map((need, index) => ({ need, index }))
+    .filter((entry) => entry.need.needType === 'talent')
+);
+
+const moneyNeedEntries = computed(() =>
+  form.needs
+    .map((need, index) => ({ need, index }))
+    .filter((entry) => entry.need.needType === 'money')
+);
 
 const countryOptions = computed(() =>
   geoStore.countries.map((country) => ({
@@ -169,22 +191,38 @@ watch(
   () => form.openingMode,
   (openingMode) => {
     if (openingMode === 'scheduled' && !form.startsAt) {
-      form.startsAt = getPresentDateTimeLocal();
+      form.startsAt = getTodayDateInputValue();
     }
   }
 );
 
-function getPresentDateTimeLocal() {
+function getTodayDateInputValue() {
   const now = new Date();
   const timezoneOffsetMs = now.getTimezoneOffset() * 60_000;
   const localDate = new Date(now.getTime() - timezoneOffsetMs);
-  return localDate.toISOString().slice(0, 16);
+  return localDate.toISOString().slice(0, 10);
+}
+
+function fromStartDateInput(dateValue: string) {
+  if (!dateValue) {
+    return null;
+  }
+  const [year, month, day] = dateValue.split('-').map(Number);
+  return new Date(year, month - 1, day, 0, 0, 0, 0).toISOString();
+}
+
+function fromEndDateInput(dateValue: string) {
+  if (!dateValue) {
+    return null;
+  }
+  const [year, month, day] = dateValue.split('-').map(Number);
+  return new Date(year, month - 1, day, 23, 59, 59, 999).toISOString();
 }
 
 watch(
   () => form.idCountry,
   async (idCountry) => {
-    if (!idCountry) return;
+    if (skipLocationCascade.value || !idCountry) return;
     form.idDepartment = 0;
     form.idCity = 0;
     await geoStore.loadDepartments(idCountry);
@@ -194,7 +232,7 @@ watch(
 watch(
   () => form.idDepartment,
   async (idDepartment) => {
-    if (!idDepartment) return;
+    if (skipLocationCascade.value || !idDepartment) return;
     form.idCity = 0;
     await geoStore.loadCities(idDepartment);
   }
@@ -235,6 +273,94 @@ function applyMapCoordinates(latitude: number, longitude: number) {
   }
 }
 
+function normalizeGeoName(name: string) {
+  return name
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function findGeoMatch<T extends { name: string }>(items: T[], candidateName: string) {
+  if (!candidateName) {
+    return undefined;
+  }
+  const normalizedCandidate = normalizeGeoName(candidateName);
+  return items.find((item) => {
+    const normalizedItem = normalizeGeoName(item.name);
+    return (
+      normalizedItem === normalizedCandidate ||
+      normalizedItem.startsWith(normalizedCandidate) ||
+      normalizedCandidate.startsWith(normalizedItem)
+    );
+  });
+}
+
+async function applyAddressFromMapCoordinates(latitude: number, longitude: number) {
+  const requestId = ++reverseGeocodeRequestId;
+  isGeocoding.value = true;
+  mapError.value = '';
+  skipNextAddressGeocode = true;
+
+  try {
+    const geocodedAddress = await reverseGeocode(latitude, longitude);
+    if (requestId !== reverseGeocodeRequestId) {
+      return;
+    }
+    if (!geocodedAddress) {
+      mapError.value = 'No se encontró una dirección para esa ubicación.';
+      return;
+    }
+
+    skipNextAddressGeocode = true;
+    form.street = geocodedAddress.street;
+    if (geocodedAddress.neighborhood) {
+      form.neighborhood = geocodedAddress.neighborhood;
+    }
+
+    const matchedCountry = findGeoMatch(geoStore.countries, geocodedAddress.countryName);
+    if (!matchedCountry) {
+      return;
+    }
+
+    skipLocationCascade.value = true;
+    try {
+      if (matchedCountry.id !== form.idCountry) {
+        form.idCountry = matchedCountry.id;
+        await geoStore.loadDepartments(matchedCountry.id);
+      }
+
+      const matchedDepartment =
+        findGeoMatch(geoStore.departments, geocodedAddress.departmentName) ||
+        findGeoMatch(geoStore.departments, geocodedAddress.cityName);
+      if (matchedDepartment && matchedDepartment.id !== form.idDepartment) {
+        form.idDepartment = matchedDepartment.id;
+        await geoStore.loadCities(matchedDepartment.id);
+      }
+
+      const matchedCity =
+        findGeoMatch(geoStore.cities, geocodedAddress.cityName) ||
+        findGeoMatch(geoStore.cities, geocodedAddress.departmentName);
+      if (matchedCity) {
+        form.idCity = matchedCity.id;
+      }
+    } finally {
+      skipLocationCascade.value = false;
+    }
+  } catch (error: unknown) {
+    if (requestId !== reverseGeocodeRequestId) {
+      return;
+    }
+    const geocodeError = error as { message?: string };
+    mapError.value = geocodeError?.message || 'No se pudo obtener la dirección de Google Maps.';
+  } finally {
+    if (requestId === reverseGeocodeRequestId) {
+      isGeocoding.value = false;
+    }
+  }
+}
+
 async function ensureLocationMap() {
   if (!canShowLocationMap.value || !mapElement.value) {
     return;
@@ -257,6 +383,7 @@ async function ensureLocationMap() {
         skipNextAddressGeocode = true;
         form.latitude = latitude;
         form.longitude = longitude;
+        void applyAddressFromMapCoordinates(latitude, longitude);
       },
     });
     locationMap = editableMap.map;
@@ -341,6 +468,9 @@ async function onAddressBlur() {
 watch(
   () => [form.idCountry, form.idDepartment, form.idCity] as const,
   () => {
+    if (skipLocationCascade.value) {
+      return;
+    }
     if (!form.street.trim() || !form.idCountry || !form.idDepartment || !form.idCity) {
       locationMap = null;
       locationMarker = null;
@@ -386,7 +516,19 @@ function removeContact(index: number) {
 }
 
 function addNeed() {
-  form.needs.push(createEmptyNeedForm());
+  form.needs.push(createEmptyNeedForm('product'));
+}
+
+function addTalentNeed() {
+  form.needs.push(createEmptyNeedForm('talent'));
+}
+
+function addMoneyNeed() {
+  if (moneyNeedsCount.value >= MAX_MONEY_NEEDS) {
+    errorMessage.value = `Solo se permiten ${MAX_MONEY_NEEDS} donaciones por acopio`;
+    return;
+  }
+  form.needs.push(createEmptyNeedForm('money'));
 }
 
 function removeNeed(index: number) {
@@ -395,19 +537,53 @@ function removeNeed(index: number) {
   }
 }
 
-function onNeedTypeChange(need: NeedFormItem, nextType: NeedType) {
-  need.needType = nextType;
-  if (nextType === 'money') {
-    need.iconKey = 'bank';
-  } else if (need.iconKey === 'bank') {
-    need.iconKey = 'comida';
-    need.bankName = '';
-    need.accountNumber = '';
-    need.accountHolder = '';
-    need.documentType = '';
-    need.documentNumber = '';
-    need.qrFile = null;
+function applyImportedNeeds(items: Array<{
+  needType?: 'product' | 'talent';
+  categoryKey?: string | null;
+  iconKey: string;
+  name: string;
+  description: string | null;
+  hasLimit: boolean;
+  targetQuantity: number | null;
+}>) {
+  const keptNeeds = form.needs.filter(
+    (need) => need.needType === 'money' || need.name.trim()
+  );
+  const importedNeeds = items.map((item) => {
+    const needType = item.needType === 'talent' ? 'talent' : 'product';
+    return {
+      ...createEmptyNeedForm(needType),
+      categoryKey:
+        needType === 'product' ? item.categoryKey || defaultProductCategoryKey : '',
+      iconKey: item.iconKey,
+      name: item.name,
+      description: item.description || '',
+      hasLimit: item.hasLimit,
+      targetQuantity: item.targetQuantity,
+    };
+  });
+  form.needs = [...keptNeeds, ...importedNeeds];
+  if (!form.needs.length) {
+    form.needs.push(createEmptyNeedForm('product'));
   }
+}
+
+function applyImportedOffers(items: Array<{
+  category: string;
+  iconKey: string;
+  name: string;
+  description: string | null;
+}>) {
+  const keptOffers = form.offers.filter((offer) => offer.name.trim());
+  form.offers = [
+    ...keptOffers,
+    ...items.map((item) => ({
+      category: item.category,
+      iconKey: item.iconKey,
+      name: item.name,
+      description: item.description || '',
+    })),
+  ];
 }
 
 function onNeedQuantityInput(need: NeedFormItem, event: Event) {
@@ -420,7 +596,7 @@ function onNeedQuantityInput(need: NeedFormItem, event: Event) {
 function addOffer() {
   form.offers.push({
     category: 'comida',
-    iconKey: 'comida',
+    iconKey: defaultProductIconKey,
     name: '',
     description: '',
   });
@@ -490,8 +666,8 @@ function validateCreateForm(): string | null {
     if (!need.name.trim()) {
       return 'Todas las necesidades deben tener nombre';
     }
-    if (need.needType === 'product' && !need.iconKey) {
-      return 'Selecciona un ícono para cada necesidad de producto';
+    if ((need.needType === 'product' || need.needType === 'talent') && !need.iconKey) {
+      return 'Selecciona un ícono para cada producto o talento';
     }
     if (need.hasLimit && (!need.targetQuantity || Number(need.targetQuantity) < 1)) {
       return 'Las necesidades con límite necesitan una cantidad válida';
@@ -501,6 +677,11 @@ function validateCreateForm(): string | null {
         return 'Las donaciones en dinero requieren banco y número de cuenta';
       }
     }
+  }
+
+  const moneyCount = form.needs.filter((need) => need.needType === 'money').length;
+  if (moneyCount > MAX_MONEY_NEEDS) {
+    return `Solo se permiten ${MAX_MONEY_NEEDS} registros de dinero por acopio`;
   }
 
   for (const offer of form.offers) {
@@ -544,6 +725,7 @@ async function submitForm() {
   try {
     const needs = form.needs.map((need) => ({
       needType: need.needType,
+      categoryKey: need.needType === 'product' ? need.categoryKey || defaultProductCategoryKey : null,
       iconKey: need.needType === 'money' ? 'bank' : need.iconKey,
       name: need.name,
       description: need.description || null,
@@ -585,8 +767,8 @@ async function submitForm() {
       description: form.description || null,
       status: form.status,
       openingMode: form.openingMode,
-      startsAt: form.openingMode === 'scheduled' ? form.startsAt : null,
-      endsAt: form.openingMode === 'scheduled' ? form.endsAt : null,
+      startsAt: form.openingMode === 'scheduled' ? fromStartDateInput(form.startsAt) : null,
+      endsAt: form.openingMode === 'scheduled' ? fromEndDateInput(form.endsAt) : null,
       responsibleName: form.responsibleName,
       address: {
         idCity: form.idCity,
@@ -680,14 +862,22 @@ async function submitForm() {
           </label>
           <label v-if="form.openingMode === 'scheduled'" class="text-sm">
             Inicio
-            <input v-model="form.startsAt" type="datetime-local" required
+            <input v-model="form.startsAt" type="date" required
               class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
           </label>
           <label v-if="form.openingMode === 'scheduled'" class="text-sm">
             Fecha de cierre
-            <input v-model="form.endsAt" type="datetime-local" required
-              class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+            <input
+              v-model="form.endsAt"
+              type="date"
+              :min="form.startsAt || undefined"
+              required
+              class="mt-1 w-full rounded-md border border-black/15 px-3 py-2"
+            />
           </label>
+          <p v-if="form.openingMode === 'scheduled'" class="text-sm text-black/60 md:col-span-2">
+            Al llegar a la fecha de cierre el acopio se cierra automáticamente.
+          </p>
         </div>
       </div>
 
@@ -731,10 +921,10 @@ async function submitForm() {
         </p>
         <template v-else-if="canShowLocationMap">
           <p class="text-xs text-black/55">
-            Mueve el pin si la ubicación no coincide. Solo se guardarán latitud y longitud;
-            la dirección escrita no cambia.
+            Mueve el pin o toca el mapa para ajustar la ubicación. La dirección se
+            actualizará con la que indique Google Maps.
           </p>
-          <p v-if="isGeocoding" class="text-xs text-black/50">Buscando ubicación…</p>
+          <p v-if="isGeocoding" class="text-xs text-black/50">Buscando dirección…</p>
           <div ref="mapElement"
             class="h-[320px] w-full overflow-hidden rounded-xl border border-black/10 bg-[#d9e8ef]" />
           <p v-if="mapError" class="text-xs text-[#c45c26]">{{ mapError }}</p>
@@ -794,78 +984,66 @@ async function submitForm() {
 
       <div class="space-y-3 rounded-2xl border border-black/10 bg-white/75 p-6">
         <div>
-          <h2 class="text-lg font-semibold">Imágenes del acopio (máx. 3, opcional)</h2>
+          <h2 class="text-lg font-semibold">Imágenes del acopio (máx. {{ MAX_ACOPIO_GALLERY_IMAGES }}, opcional)</h2>
           <p class="mt-1 text-sm text-black/60">
             Formato vertical de celular (9:16). Resolución recomendada: 1080 × 1920 px,
             para que se vean bien en el carrusel y la galería.
           </p>
         </div>
-        <ImageDropzone v-model="galleryFiles" :max-files="3" />
+        <ImageDropzone v-model="galleryFiles" :max-files="MAX_ACOPIO_GALLERY_IMAGES" />
       </div>
 
       <div class="space-y-3 rounded-2xl border border-black/10 bg-white/75 p-6">
         <div>
           <h2 class="text-lg font-semibold">Necesitamos (recaudo) (requerido)</h2>
-          <p class="text-sm text-black/60">Mínimo 1.</p>
+          <p class="text-sm text-black/60">
+            Mínimo 1. Agrégalos manualmente o con Excel.
+          </p>
         </div>
-        <div v-for="(need, index) in form.needs" :key="index" class="space-y-3 rounded-lg border border-black/10 p-3">
+        <ExcelImportPanel
+          template-type="needs"
+          @parsed="applyImportedNeeds"
+          @error="errorMessage = ''"
+          @success="errorMessage = ''"
+        />
+        <h3 class="text-sm font-semibold text-[#1f6f5b]">Productos</h3>
+        <div
+          v-for="entry in productNeedEntries"
+          :key="`product-${entry.index}`"
+          class="space-y-3 rounded-lg border border-black/10 p-3"
+        >
           <div class="grid gap-3 md:grid-cols-4">
             <label class="text-sm">
-              Tipo
-              <SearchableSelect :model-value="need.needType" :options="needTypeOptions" required
-                @update:model-value="(nextType) => onNeedTypeChange(need, nextType as NeedType)" />
+              Categoría (opcional)
+              <SearchableSelect v-model="entry.need.categoryKey" :options="productCategoryOptions" placeholder="Selecciona" />
             </label>
             <label class="text-sm md:col-span-2">
-              {{ need.needType === 'money' ? 'Nombre de la donación' : 'Nombre del producto' }}
-              <input v-model="need.name" required class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+              Nombre del producto
+              <input v-model="entry.need.name" required class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
             </label>
             <label class="flex items-end justify-between gap-2 text-sm">
               <span class="mb-3 inline-flex items-center gap-2">
-                <input v-model="need.hasLimit" type="checkbox" />
+                <input v-model="entry.need.hasLimit" type="checkbox" />
                 Tiene límite
               </span>
               <button v-if="form.needs.length > 1" type="button" class="mb-3 text-xs text-black/45"
-                @click="removeNeed(index)">
+                @click="removeNeed(entry.index)">
                 Quitar
               </button>
             </label>
-            <label v-if="need.hasLimit" class="text-sm md:col-span-3">
+            <label v-if="entry.need.hasLimit" class="text-sm md:col-span-3">
               Cantidad
-              <input :value="formatThousands(need.targetQuantity)" type="text" inputmode="numeric" required
+              <input :value="formatThousands(entry.need.targetQuantity)" type="text" inputmode="numeric" required
                 class="mt-1 w-full rounded-md border border-black/15 px-3 py-2"
-                @input="onNeedQuantityInput(need, $event)" />
+                @input="onNeedQuantityInput(entry.need, $event)" />
             </label>
           </div>
-          <NeedIconPicker v-model="need.iconKey" :need-type="need.needType" />
+          <NeedIconPicker v-model="entry.need.iconKey" :need-type="entry.need.needType" />
           <label class="text-sm">
             Descripción (opcional)
-            <textarea v-model="need.description" rows="2"
+            <textarea v-model="entry.need.description" rows="2"
               class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
           </label>
-          <div v-if="need.needType === 'money'" class="grid gap-3 md:grid-cols-2">
-            <label class="text-sm">
-              Nombre del banco
-              <input v-model="need.bankName" required class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
-            </label>
-            <label class="text-sm">
-              Número de cuenta
-              <input v-model="need.accountNumber" required
-                class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
-            </label>
-            <label class="text-sm">
-              Propietario (opcional)
-              <input v-model="need.accountHolder" class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
-            </label>
-            <label class="text-sm">
-              Tipo de documento (opcional)
-              <SearchableSelect v-model="need.documentType" :options="documentTypeOptions" placeholder="Selecciona" />
-            </label>
-            <label class="text-sm">
-              Número de documento (opcional)
-              <input v-model="need.documentNumber" class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
-            </label>
-            <QrCropper v-model="need.qrFile" />
-          </div>
         </div>
         <button
           type="button"
@@ -873,14 +1051,139 @@ async function submitForm() {
           @click="addNeed"
         >
           <Plus :size="16" :stroke-width="2.4" />
-          Agregar
+          Agregar producto
+        </button>
+
+        <h3 class="text-sm font-semibold text-[#1f6f5b]">Talento</h3>
+        <div
+          v-for="entry in talentNeedEntries"
+          :key="`talent-${entry.index}`"
+          class="space-y-3 rounded-lg border border-black/10 p-3"
+        >
+          <div class="grid gap-3 md:grid-cols-4">
+            <label class="text-sm md:col-span-2">
+              Nombre del talento
+              <input v-model="entry.need.name" required class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+            </label>
+            <label class="flex items-end justify-between gap-2 text-sm">
+              <span class="mb-3 inline-flex items-center gap-2">
+                <input v-model="entry.need.hasLimit" type="checkbox" />
+                Tiene límite
+              </span>
+              <button v-if="form.needs.length > 1" type="button" class="mb-3 text-xs text-black/45"
+                @click="removeNeed(entry.index)">
+                Quitar
+              </button>
+            </label>
+            <label v-if="entry.need.hasLimit" class="text-sm md:col-span-3">
+              Cantidad
+              <input :value="formatThousands(entry.need.targetQuantity)" type="text" inputmode="numeric" required
+                class="mt-1 w-full rounded-md border border-black/15 px-3 py-2"
+                @input="onNeedQuantityInput(entry.need, $event)" />
+            </label>
+          </div>
+          <NeedIconPicker v-model="entry.need.iconKey" :need-type="entry.need.needType" />
+          <label class="text-sm">
+            Descripción (opcional)
+            <textarea v-model="entry.need.description" rows="2"
+              class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+          </label>
+        </div>
+        <button
+          type="button"
+          class="inline-flex items-center gap-1 text-sm text-[#1f6f5b]"
+          @click="addTalentNeed"
+        >
+          <Plus :size="16" :stroke-width="2.4" />
+          Agregar talento
+        </button>
+
+        <h3 class="text-sm font-semibold text-[#1f6f5b]">Donaciones</h3>
+        <p class="text-sm text-black/60">
+          Las donaciones se agregan manualmente (máx. {{ MAX_MONEY_NEEDS }}).
+        </p>
+        <div
+          v-for="entry in moneyNeedEntries"
+          :key="`money-${entry.index}`"
+          class="space-y-3 rounded-lg border border-black/10 p-3"
+        >
+          <div class="grid gap-3 md:grid-cols-4">
+            <label class="text-sm md:col-span-2">
+              Nombre de la donación
+              <input v-model="entry.need.name" required class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+            </label>
+            <label class="flex items-end justify-between gap-2 text-sm">
+              <span class="mb-3 inline-flex items-center gap-2">
+                <input v-model="entry.need.hasLimit" type="checkbox" />
+                Tiene límite
+              </span>
+              <button v-if="form.needs.length > 1" type="button" class="mb-3 text-xs text-black/45"
+                @click="removeNeed(entry.index)">
+                Quitar
+              </button>
+            </label>
+            <label v-if="entry.need.hasLimit" class="text-sm md:col-span-3">
+              Cantidad
+              <input :value="formatThousands(entry.need.targetQuantity)" type="text" inputmode="numeric" required
+                class="mt-1 w-full rounded-md border border-black/15 px-3 py-2"
+                @input="onNeedQuantityInput(entry.need, $event)" />
+            </label>
+          </div>
+          <NeedIconPicker v-model="entry.need.iconKey" :need-type="entry.need.needType" />
+          <label class="text-sm">
+            Descripción (opcional)
+            <textarea v-model="entry.need.description" rows="2"
+              class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+          </label>
+          <div class="grid gap-3 md:grid-cols-2">
+            <label class="text-sm">
+              Nombre del banco
+              <input v-model="entry.need.bankName" required class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+            </label>
+            <label class="text-sm">
+              Número de cuenta
+              <input v-model="entry.need.accountNumber" required
+                class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+            </label>
+            <label class="text-sm">
+              Propietario (opcional)
+              <input v-model="entry.need.accountHolder" class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+            </label>
+            <label class="text-sm">
+              Tipo de documento (opcional)
+              <SearchableSelect v-model="entry.need.documentType" :options="documentTypeOptions" placeholder="Selecciona" />
+            </label>
+            <label class="text-sm">
+              Número de documento (opcional)
+              <input v-model="entry.need.documentNumber" class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+            </label>
+            <QrCropper v-model="entry.need.qrFile" />
+          </div>
+        </div>
+        <button
+          v-if="moneyNeedsCount < MAX_MONEY_NEEDS"
+          type="button"
+          class="inline-flex items-center gap-1 text-sm text-[#1f6f5b]"
+          @click="addMoneyNeed"
+        >
+          <Plus :size="16" :stroke-width="2.4" />
+          Agregar donación
         </button>
       </div>
 
       <div class="space-y-3 rounded-2xl border border-black/10 bg-white/75 p-6">
         <div>
           <h2 class="text-lg font-semibold">Estamos dando (opcional)</h2>
+          <p class="text-sm text-black/60">
+            Agrégalos manualmente o con Excel.
+          </p>
         </div>
+        <ExcelImportPanel
+          template-type="offers"
+          @parsed="applyImportedOffers"
+          @error="errorMessage = ''"
+          @success="errorMessage = ''"
+        />
         <p v-if="!form.offers.length" class="text-sm text-black/50">
           Si tu acopio también entrega ayudas, agrégalas aquí. Las personas irán a recogerlas.
           Si por ahora no das nada, déjalo vacío y complétalo después.

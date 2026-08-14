@@ -113,6 +113,56 @@ export const useAcopiosStore = defineStore('acopios', () => {
     return response.data;
   }
 
+  async function downloadExcelTemplate(templateType: 'needs' | 'offers') {
+    const response = await apiClient.get(`/acopios/excel-templates/${templateType}`, {
+      responseType: 'blob',
+    });
+    const fileName =
+      templateType === 'needs'
+        ? 'plantilla-necesitamos.xlsx'
+        : 'plantilla-estamos-dando.xlsx';
+    const blobUrl = URL.createObjectURL(response.data);
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(blobUrl);
+  }
+
+  async function parseExcelTemplate(templateType: 'needs' | 'offers', excelFile: File) {
+    const formData = new FormData();
+    formData.append('file', excelFile);
+    const response = await apiClient.post<{ items: unknown[] }>(
+      `/acopios/excel-templates/${templateType}/parse`,
+      formData
+    );
+    return response.data.items;
+  }
+
+  async function importNeedsExcel(idAcopio: number, excelFile: File) {
+    const formData = new FormData();
+    formData.append('file', excelFile);
+    const response = await apiClient.post<{ importedCount: number }>(
+      `/acopios/${idAcopio}/needs/import`,
+      formData
+    );
+    await fetchAcopio(idAcopio);
+    return response.data;
+  }
+
+  async function importOffersExcel(idAcopio: number, excelFile: File) {
+    const formData = new FormData();
+    formData.append('file', excelFile);
+    const response = await apiClient.post<{ importedCount: number }>(
+      `/acopios/${idAcopio}/offers/import`,
+      formData
+    );
+    await fetchAcopio(idAcopio);
+    return response.data;
+  }
+
   async function createContact(idAcopio: number, payload: Record<string, unknown>) {
     const response = await apiClient.post<AcopioContact>(
       `/acopios/${idAcopio}/contacts`,
@@ -177,5 +227,9 @@ export const useAcopiosStore = defineStore('acopios', () => {
     inviteManager,
     resendManagerInvitation,
     listManagers,
+    downloadExcelTemplate,
+    parseExcelTemplate,
+    importNeedsExcel,
+    importOffersExcel,
   };
 });

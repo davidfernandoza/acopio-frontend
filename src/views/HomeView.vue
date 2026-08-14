@@ -1,12 +1,14 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
 import { useAcopiosStore } from '../stores/acopios';
 import { focusMapOnLocation, getBrowserLocation, renderMarkersMap } from '../composables/useGoogleMaps';
 import { resolveMediaUrl, buildInitialsAvatarUrl } from '../utils/media';
+import { formatThousands } from '../utils/numberFormat';
 import NeedIcon from '../components/NeedIcon.vue';
 import ImageCarousel from '../components/ImageCarousel.vue';
-import type { Acopio, CarouselSlide } from '../types';
+import { groupNeedsByType, groupOffersByCategory } from '../constants/needIcons';
+import type { Acopio, AcopioNeed, CarouselSlide } from '../types';
 
 const acopiosStore = useAcopiosStore();
 const router = useRouter();
@@ -15,6 +17,7 @@ const mapError = ref('');
 const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 const searchQuery = ref('');
 const expandedAcopioId = ref<number | null>(null);
+const qrModalNeed = ref<AcopioNeed | null>(null);
 let markersMap: google.maps.Map | null = null;
 
 const openAcopios = computed(() =>
@@ -58,6 +61,20 @@ function addressLabel(acopio: Acopio) {
 
 function toggleDetails(idAcopio: number) {
   expandedAcopioId.value = expandedAcopioId.value === idAcopio ? null : idAcopio;
+}
+
+function openQrModal(need: AcopioNeed) {
+  qrModalNeed.value = need;
+}
+
+function closeQrModal() {
+  qrModalNeed.value = null;
+}
+
+function onHomeKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    closeQrModal();
+  }
 }
 
 function showOnMap(acopio: Acopio) {
@@ -143,6 +160,7 @@ async function drawMap() {
 }
 
 onMounted(async () => {
+  window.addEventListener('keydown', onHomeKeydown);
   const [, , detectedBrowserLocation] = await Promise.all([
     acopiosStore.fetchAcopios(),
     acopiosStore.fetchCarousel(),
@@ -151,6 +169,10 @@ onMounted(async () => {
   browserLocation.value = detectedBrowserLocation;
   await nextTick();
   await drawMap();
+});
+
+onUnmounted(() => {
+  window.removeEventListener('keydown', onHomeKeydown);
 });
 
 watch([markers, viewerLocation], async () => {
@@ -277,42 +299,132 @@ watch([markers, viewerLocation], async () => {
           </button>
           <div
             v-if="expandedAcopioId === acopio.id"
-            class="mt-3 grid gap-3 rounded-lg border border-black/10 bg-white p-3 text-sm"
-            :class="(acopio.offers || []).length ? 'md:grid-cols-2' : ''"
+            class="mt-3 space-y-4 rounded-lg border border-black/10 bg-white p-3 text-sm"
           >
             <div>
               <p class="font-semibold">Necesitamos</p>
-              <ul class="mt-2 space-y-1 text-black/70">
-                <li v-for="need in acopio.needs || []" :key="need.id" class="flex items-start gap-2">
-                  <NeedIcon :icon-key="need.iconKey" :size="18" />
-                  <span class="min-w-0 break-words">
-                    {{ need.name }}
-                    <span class="text-black/45">
-                      · {{ need.needType === 'money' ? 'Dinero' : 'Producto' }}
-                    </span>
-                    <span v-if="need.description" class="block text-black/45">{{ need.description }}</span>
-                  </span>
-                </li>
-                <li v-if="!(acopio.needs || []).length" class="text-black/45">
-                  Aún no registran necesidades.
-                </li>
-              </ul>
+              <div v-if="(acopio.needs || []).length" class="mt-2 space-y-3 text-black/70">
+                <div v-for="group in groupNeedsByType(acopio.needs || [])" :key="group.key">
+                  <p class="text-xs font-semibold text-[#1f6f5b]">{{ group.title }}</p>
+                  <div
+                    v-for="section in group.subgroups || [{ key: group.key, title: '', items: group.items }]"
+                    :key="section.key"
+                    class="mt-1"
+                  >
+                    <p
+                      v-if="section.title"
+                      class="mt-2 text-[11px] font-semibold uppercase tracking-wide text-black/40"
+                    >
+                      {{ section.title }}
+                    </p>
+                    <ul class="mt-1 space-y-2">
+                      <li v-for="need in section.items" :key="need.id">
+                        <div
+                          v-if="need.needType === 'money'"
+                          class="flex flex-wrap items-start gap-2 rounded-md border border-black/10 bg-white p-2"
+                        >
+                          <NeedIcon :icon-key="need.iconKey" :size="18" />
+                          <div class="min-w-0 flex-1">
+                            <span class="min-w-0 break-words font-medium">{{ need.name }}</span>
+                            <span v-if="need.description" class="block text-black/45">{{ need.description }}</span>
+                            <p v-if="need.hasLimit" class="text-black/45">
+                              {{ formatThousands(need.targetQuantity) }}
+                              <span v-if="need.limitReached" class="text-[#c45c26]"> · Límite alcanzado</span>
+                            </p>
+                            <ul class="mt-1 space-y-0.5 text-black/55">
+                              <li v-if="need.bankName">Banco: {{ need.bankName }}</li>
+                              <li v-if="need.accountNumber">Cuenta: {{ need.accountNumber }}</li>
+                              <li v-if="need.accountHolder">Propietario: {{ need.accountHolder }}</li>
+                              <li v-if="need.documentType || need.documentNumber">
+                                Documento:
+                                {{ need.documentType ? need.documentType.toUpperCase() : '' }}
+                                {{ need.documentNumber || '' }}
+                              </li>
+                            </ul>
+                          </div>
+                          <div
+                            v-if="need.qrUrl"
+                            class="flex shrink-0 flex-col items-center gap-1"
+                          >
+                            <img
+                              :src="resolveMediaUrl(need.qrUrl)"
+                              alt="QR"
+                              class="h-16 w-16 rounded-md border border-black/10 object-cover"
+                            />
+                            <button
+                              type="button"
+                              class="nav-btn nav-btn-compact"
+                              @click="openQrModal(need)"
+                            >
+                              Ver QR
+                            </button>
+                          </div>
+                        </div>
+                        <div v-else class="flex items-start gap-2">
+                          <NeedIcon :icon-key="need.iconKey" :size="18" />
+                          <span class="min-w-0 break-words">
+                            {{ need.name }}
+                            <span v-if="need.description" class="block text-black/45">{{ need.description }}</span>
+                          </span>
+                        </div>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <p v-else class="mt-2 text-black/45">
+                Aún no registran necesidades.
+              </p>
             </div>
-            <div v-if="(acopio.offers || []).length">
+            <div v-if="(acopio.offers || []).length" class="border-t border-black/10 pt-4">
               <p class="font-semibold">Estamos dando</p>
-              <ul class="mt-2 space-y-1 text-black/70">
-                <li v-for="offer in acopio.offers || []" :key="offer.id" class="flex items-start gap-2">
-                  <NeedIcon :icon-key="offer.iconKey" :size="18" />
-                  <span class="min-w-0 break-words">
-                    {{ offer.name }}
-                    <span class="text-black/45"> · {{ offer.category }}</span>
-                  </span>
-                </li>
-              </ul>
+              <div class="mt-2 grid gap-3 text-black/70 sm:grid-cols-2">
+                <div v-for="group in groupOffersByCategory(acopio.offers || [])" :key="group.key">
+                  <p class="text-[11px] font-semibold uppercase tracking-wide text-black/40">
+                    {{ group.title }}
+                  </p>
+                  <ul class="mt-1 space-y-1">
+                    <li v-for="offer in group.items" :key="offer.id" class="flex items-start gap-2">
+                      <NeedIcon :icon-key="offer.iconKey" :size="18" />
+                      <span class="min-w-0 break-words">
+                        {{ offer.name }}
+                      </span>
+                    </li>
+                  </ul>
+                </div>
+              </div>
             </div>
           </div>
         </article>
       </div>
     </div>
+
+    <Teleport to="body">
+      <div
+        v-if="qrModalNeed?.qrUrl"
+        class="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4"
+        @click="closeQrModal"
+      >
+        <div
+          class="w-full max-w-sm rounded-2xl border border-black/10 bg-white p-4 shadow-xl"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Código QR"
+          @click.stop
+        >
+          <div class="mb-3 flex items-center justify-between gap-3">
+            <h2 class="text-lg font-semibold text-[#1f6f5b]">{{ qrModalNeed.name }}</h2>
+            <button type="button" class="nav-btn" @click="closeQrModal">
+              Cerrar
+            </button>
+          </div>
+          <img
+            :src="resolveMediaUrl(qrModalNeed.qrUrl)"
+            alt="QR"
+            class="mx-auto w-full max-w-[280px] rounded-xl border border-black/10 object-contain"
+          />
+        </div>
+      </div>
+    </Teleport>
   </section>
 </template>

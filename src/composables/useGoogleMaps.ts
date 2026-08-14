@@ -45,6 +45,80 @@ export async function geocodeAddress(
   };
 }
 
+export type ReverseGeocodedAddress = {
+  street: string;
+  neighborhood: string;
+  cityName: string;
+  departmentName: string;
+  countryName: string;
+  formattedAddress: string;
+};
+
+function getAddressComponent(
+  components: google.maps.GeocoderAddressComponent[],
+  type: string
+) {
+  return components.find((component) => component.types.includes(type))?.long_name || '';
+}
+
+function buildStreetFromGeocodeResult(result: google.maps.GeocoderResult) {
+  const route = getAddressComponent(result.address_components, 'route');
+  const streetNumber = getAddressComponent(result.address_components, 'street_number');
+  const premise = getAddressComponent(result.address_components, 'premise');
+
+  if (route && streetNumber) {
+    return `${route} #${streetNumber}`;
+  }
+  if (route) {
+    return route;
+  }
+  if (premise) {
+    return premise;
+  }
+
+  const firstFormattedSegment = result.formatted_address.split(',')[0]?.trim();
+  return firstFormattedSegment || result.formatted_address;
+}
+
+export async function reverseGeocode(
+  latitude: number,
+  longitude: number
+): Promise<ReverseGeocodedAddress | null> {
+  await ensureGoogleMapsApi();
+  await importLibrary('geocoding');
+
+  const geocoder = new google.maps.Geocoder();
+  const response = await geocoder.geocode({
+    location: { lat: latitude, lng: longitude },
+  });
+  const preferredResult =
+    response.results.find(
+      (result) =>
+        result.types.includes('street_address') ||
+        result.address_components.some((component) => component.types.includes('route'))
+    ) || response.results[0];
+
+  if (!preferredResult) {
+    return null;
+  }
+
+  const components = preferredResult.address_components;
+
+  return {
+    street: buildStreetFromGeocodeResult(preferredResult),
+    neighborhood:
+      getAddressComponent(components, 'neighborhood') ||
+      getAddressComponent(components, 'sublocality_level_1') ||
+      getAddressComponent(components, 'sublocality'),
+    cityName:
+      getAddressComponent(components, 'locality') ||
+      getAddressComponent(components, 'administrative_area_level_2'),
+    departmentName: getAddressComponent(components, 'administrative_area_level_1'),
+    countryName: getAddressComponent(components, 'country'),
+    formattedAddress: preferredResult.formatted_address,
+  };
+}
+
 export async function renderMap(options: {
   element: HTMLElement;
   latitude: number;
@@ -87,15 +161,27 @@ export async function renderEditableLocationMap(options: {
     title: 'Ubicación del acopio',
   });
 
+  function emitPosition(position: google.maps.LatLng) {
+    options.onPositionChange({
+      latitude: position.lat(),
+      longitude: position.lng(),
+    });
+  }
+
   marker.addListener('dragend', () => {
     const position = marker.getPosition();
     if (!position) {
       return;
     }
-    options.onPositionChange({
-      latitude: position.lat(),
-      longitude: position.lng(),
-    });
+    emitPosition(position);
+  });
+
+  map.addListener('click', (event: google.maps.MapMouseEvent) => {
+    if (!event.latLng) {
+      return;
+    }
+    marker.setPosition(event.latLng);
+    emitPosition(event.latLng);
   });
 
   return { map, marker };

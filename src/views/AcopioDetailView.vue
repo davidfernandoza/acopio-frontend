@@ -2,19 +2,18 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, RouterLink, useRouter } from 'vue-router';
 import { useAcopiosStore } from '../stores/acopios';
-import { useAuthStore } from '../stores/auth';
 import { renderMap } from '../composables/useGoogleMaps';
 import { resolveMediaUrl, buildInitialsAvatarUrl } from '../utils/media';
 import { formatThousands } from '../utils/numberFormat';
 import NeedIcon from '../components/NeedIcon.vue';
 import ImageCarousel from '../components/ImageCarousel.vue';
 import { Mail, MapPin } from '@lucide/vue';
+import { groupNeedsByType, groupOffersByCategory } from '../constants/needIcons';
 import type { AcopioContact, AcopioNeed } from '../types';
 
 const route = useRoute();
 const router = useRouter();
 const acopiosStore = useAcopiosStore();
-const authStore = useAuthStore();
 const mapElement = ref<HTMLElement | null>(null);
 const mapError = ref('');
 const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
@@ -88,16 +87,13 @@ function contactLabel(contact: AcopioContact) {
   return contact.value;
 }
 
-const offerCategoryLabels: Record<string, string> = {
-  comida: 'Comida',
-  mercado: 'Mercado',
-  productos: 'Productos',
-  otro: 'Otro',
-};
+const needGroups = computed(() =>
+  groupNeedsByType(acopiosStore.currentAcopio?.needs || []),
+);
 
-function offerCategoryLabel(category: string) {
-  return offerCategoryLabels[category] || category;
-}
+const offerGroups = computed(() =>
+  groupOffersByCategory(acopiosStore.currentAcopio?.offers || []),
+);
 
 function scrollProfileToTop() {
   window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
@@ -155,12 +151,12 @@ watch(
     {{ loadError }}
   </p>
   <section v-else-if="acopiosStore.currentAcopio" class="space-y-8">
-    <div class="flex flex-wrap items-start justify-between gap-4">
-      <div class="flex items-start gap-4">
+    <div class="flex items-start justify-between gap-4">
+      <div class="flex min-w-0 flex-1 items-start gap-4">
         <img
           :src="resolveMediaUrl(acopiosStore.currentAcopio.avatarUrl) || buildInitialsAvatarUrl(acopiosStore.currentAcopio.name)"
-          :alt="acopiosStore.currentAcopio.name" class="h-20 w-20 rounded-full object-cover ring-2 ring-[#1f6f5b]/25" />
-        <div>
+          :alt="acopiosStore.currentAcopio.name" class="h-20 w-20 shrink-0 rounded-full object-cover ring-2 ring-[#1f6f5b]/25" />
+        <div class="min-w-0 flex-1">
 
           <h1 class="mt-1 flex flex-wrap items-baseline gap-x-3 text-4xl font-semibold">
             {{ acopiosStore.currentAcopio.name }}
@@ -202,8 +198,11 @@ watch(
           </p>
         </div>
       </div>
-      <RouterLink v-if="authStore.isAuthenticated" :to="`/acopios/${idAcopio}/gestionar`"
-        class="nav-btn nav-btn-primary">
+      <RouterLink
+        v-if="acopiosStore.currentAcopio.canManage"
+        :to="`/acopios/${idAcopio}/gestionar`"
+        class="nav-btn nav-btn-primary shrink-0"
+      >
         Gestionar
       </RouterLink>
     </div>
@@ -269,95 +268,106 @@ watch(
       </section>
 
       <section
-        v-if="(acopiosStore.currentAcopio.offers || []).length"
+        v-if="offerGroups.length"
         class="rounded-xl border border-black/10 bg-white/70 p-4"
       >
         <h2 class="text-lg font-semibold">Estamos dando</h2>
-        <ul class="mt-3 grid gap-3 sm:grid-cols-2">
-          <li
-            v-for="offer in acopiosStore.currentAcopio.offers || []"
-            :key="offer.id"
-            class="rounded-lg border border-black/10 bg-white p-3 text-sm"
-          >
-            <div class="flex gap-3">
-              <NeedIcon :icon-key="offer.iconKey" :size="24" />
-              <div class="min-w-0 flex-1">
-                <p class="font-medium">
-                  {{ offer.name }}
-                  <span class="font-normal text-black/60">
-                    · {{ offerCategoryLabel(offer.category) }}
-                  </span>
-                </p>
-                <p v-if="offer.description" class="text-black/60">{{ offer.description }}</p>
-                <p v-if="!offer.isAvailable" class="text-[#c45c26]">No disponible</p>
-              </div>
-            </div>
-          </li>
-        </ul>
+        <div class="mt-3 space-y-4">
+          <div v-for="group in offerGroups" :key="group.key">
+            <h3 class="mb-2 text-xs font-semibold uppercase tracking-wide text-black/45">
+              {{ group.title }}
+            </h3>
+            <ul class="grid gap-3 sm:grid-cols-2">
+              <li
+                v-for="offer in group.items"
+                :key="offer.id"
+                class="rounded-lg border border-black/10 bg-white p-3 text-sm"
+              >
+                <div class="flex gap-3">
+                  <NeedIcon :icon-key="offer.iconKey" :size="24" />
+                  <div class="min-w-0 flex-1">
+                    <p class="font-medium">{{ offer.name }}</p>
+                    <p v-if="offer.description" class="text-black/60">{{ offer.description }}</p>
+                    <p v-if="!offer.isAvailable" class="text-[#c45c26]">No disponible</p>
+                  </div>
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
       </section>
       </div>
 
       <div class="flex min-w-0 flex-1 flex-col gap-6">
       <section class="rounded-xl border border-black/10 bg-white/70 p-4">
         <h2 class="text-lg font-semibold">Necesitamos</h2>
-        <ul class="mt-3 grid gap-3 sm:grid-cols-2">
-          <li
-            v-for="need in acopiosStore.currentAcopio.needs || []"
-            :key="need.id"
-            class="rounded-lg border border-black/10 bg-white p-3 text-sm"
-            :class="need.needType === 'money' ? 'sm:col-span-2' : ''"
-          >
-            <div class="flex flex-wrap gap-3">
-              <NeedIcon :icon-key="need.iconKey" :size="24" />
-              <div class="min-w-0 flex-1">
-                <p class="font-medium">
-                  {{ need.name }}
-                  <span class="font-normal text-black/60">
-                    · {{ need.needType === 'money' ? 'Dinero' : 'Producto' }}
-                  </span>
-                </p>
-                <p v-if="need.description" class="text-black/60">{{ need.description }}</p>
-                <p v-if="need.hasLimit" class="text-black/60">
-                  {{ formatThousands(need.targetQuantity) }}
-                  <span v-if="need.limitReached" class="text-[#c45c26]"> · Límite alcanzado</span>
-                </p>
-                <ul
-                  v-if="need.needType === 'money'"
-                  class="mt-1 space-y-0.5 text-black/60"
+        <div v-if="needGroups.length" class="mt-3 space-y-5">
+          <div v-for="group in needGroups" :key="group.key">
+            <h3 class="text-sm font-semibold text-[#1f6f5b]">{{ group.title }}</h3>
+            <div
+              v-for="section in group.subgroups || [{ key: group.key, title: '', items: group.items }]"
+              :key="section.key"
+              :class="group.subgroups ? 'mt-3' : 'mt-2'"
+            >
+              <h4
+                v-if="section.title"
+                class="mb-2 text-xs font-semibold uppercase tracking-wide text-black/45"
+              >
+                {{ section.title }}
+              </h4>
+              <ul class="grid gap-3 sm:grid-cols-2">
+                <li
+                  v-for="need in section.items"
+                  :key="need.id"
+                  class="rounded-lg border border-black/10 bg-white p-3 text-sm"
+                  :class="need.needType === 'money' ? 'sm:col-span-2' : ''"
                 >
-                  <li v-if="need.bankName">Banco: {{ need.bankName }}</li>
-                  <li v-if="need.accountNumber">Cuenta: {{ need.accountNumber }}</li>
-                  <li v-if="need.accountHolder">Propietario: {{ need.accountHolder }}</li>
-                  <li v-if="need.documentType || need.documentNumber">
-                    Documento:
-                    {{ need.documentType ? need.documentType.toUpperCase() : '' }}
-                    {{ need.documentNumber || '' }}
-                  </li>
-                </ul>
-              </div>
-              <div v-if="need.qrUrl" class="flex shrink-0 flex-row items-center gap-2 sm:flex-col">
-                <img
-                  :src="resolveMediaUrl(need.qrUrl)"
-                  alt="QR"
-                  class="h-16 w-16 rounded-md border border-black/10 object-cover"
-                />
-                <button
-                  type="button"
-                  class="nav-btn nav-btn-compact"
-                  @click="openQrModal(need)"
-                >
-                  Ver QR
-                </button>
-              </div>
+                  <div class="flex flex-wrap gap-3">
+                    <NeedIcon :icon-key="need.iconKey" :size="24" />
+                    <div class="min-w-0 flex-1">
+                      <p class="font-medium">{{ need.name }}</p>
+                      <p v-if="need.description" class="text-black/60">{{ need.description }}</p>
+                      <p v-if="need.hasLimit" class="text-black/60">
+                        {{ formatThousands(need.targetQuantity) }}
+                        <span v-if="need.limitReached" class="text-[#c45c26]"> · Límite alcanzado</span>
+                      </p>
+                      <ul
+                        v-if="need.needType === 'money'"
+                        class="mt-1 space-y-0.5 text-black/60"
+                      >
+                        <li v-if="need.bankName">Banco: {{ need.bankName }}</li>
+                        <li v-if="need.accountNumber">Cuenta: {{ need.accountNumber }}</li>
+                        <li v-if="need.accountHolder">Propietario: {{ need.accountHolder }}</li>
+                        <li v-if="need.documentType || need.documentNumber">
+                          Documento:
+                          {{ need.documentType ? need.documentType.toUpperCase() : '' }}
+                          {{ need.documentNumber || '' }}
+                        </li>
+                      </ul>
+                    </div>
+                    <div v-if="need.qrUrl" class="flex shrink-0 flex-row items-center gap-2 sm:flex-col">
+                      <img
+                        :src="resolveMediaUrl(need.qrUrl)"
+                        alt="QR"
+                        class="h-16 w-16 rounded-md border border-black/10 object-cover"
+                      />
+                      <button
+                        type="button"
+                        class="nav-btn nav-btn-compact"
+                        @click="openQrModal(need)"
+                      >
+                        Ver QR
+                      </button>
+                    </div>
+                  </div>
+                </li>
+              </ul>
             </div>
-          </li>
-          <li
-            v-if="!(acopiosStore.currentAcopio.needs || []).length"
-            class="text-black/50 sm:col-span-2"
-          >
-            Aún no registran necesidades.
-          </li>
-        </ul>
+          </div>
+        </div>
+        <p v-else class="mt-3 text-sm text-black/50">
+          Aún no registran necesidades.
+        </p>
       </section>
       </div>
     </div>

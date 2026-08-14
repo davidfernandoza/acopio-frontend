@@ -26,7 +26,7 @@ function selectIcon(iconKey: string) {
 
 <template>
   <div class="space-y-2">
-    <p class="text-sm">Icono</p>
+    <p class="text-sm">Icono (opcional)</p>
     <div v-if="needType === 'money'" class="flex items-center gap-3">
       <div
         class="flex h-12 w-12 items-center justify-center rounded-lg border border-[#1f6f5b] bg-[#1f6f5b]/10"
