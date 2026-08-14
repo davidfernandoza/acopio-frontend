@@ -231,7 +231,7 @@ watch([markers, viewerLocation], async () => {
         <article
           v-for="acopio in filteredAcopios"
           :key="acopio.id"
-          class="rounded-xl border border-black/10 bg-white/70 p-4"
+          class="min-w-0 rounded-xl border border-black/10 bg-white/70 p-4"
         >
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="flex min-w-0 flex-1 items-center gap-3">
@@ -240,12 +240,12 @@ watch([markers, viewerLocation], async () => {
                 :alt="acopio.name"
                 class="h-12 w-12 shrink-0 rounded-full object-cover"
               />
-              <div class="min-w-0">
-                <h2 class="text-xl font-semibold">{{ acopio.name }}</h2>
+              <div class="min-w-0 flex-1">
+                <h2 class="text-xl font-semibold break-words">{{ acopio.name }}</h2>
                 <p class="text-sm text-black/60">Abierto</p>
                 <a
                   href="#mapa-acopios"
-                  class="mt-0.5 block truncate text-sm text-[#1f6f5b] underline"
+                  class="mt-0.5 block break-words text-sm text-[#1f6f5b] underline"
                   @click.prevent="showOnMap(acopio)"
                 >
                   {{ addressLabel(acopio) }}
@@ -259,7 +259,7 @@ watch([markers, viewerLocation], async () => {
               Ver
             </RouterLink>
           </div>
-          <p v-if="acopio.description" class="mt-3 truncate text-sm text-black/70">
+          <p v-if="acopio.description" class="mt-3 break-words whitespace-pre-wrap text-sm text-black/70">
             {{ acopio.description }}
           </p>
           <button
@@ -283,9 +283,9 @@ watch([markers, viewerLocation], async () => {
             <div>
               <p class="font-semibold">Necesitamos</p>
               <ul class="mt-2 space-y-1 text-black/70">
-                <li v-for="need in acopio.needs || []" :key="need.id" class="flex items-center gap-2">
+                <li v-for="need in acopio.needs || []" :key="need.id" class="flex items-start gap-2">
                   <NeedIcon :icon-key="need.iconKey" :size="18" />
-                  <span>
+                  <span class="min-w-0 break-words">
                     {{ need.name }}
                     <span class="text-black/45">
                       · {{ need.needType === 'money' ? 'Dinero' : 'Producto' }}
@@ -301,9 +301,9 @@ watch([markers, viewerLocation], async () => {
             <div v-if="(acopio.offers || []).length">
               <p class="font-semibold">Estamos dando</p>
               <ul class="mt-2 space-y-1 text-black/70">
-                <li v-for="offer in acopio.offers || []" :key="offer.id" class="flex items-center gap-2">
+                <li v-for="offer in acopio.offers || []" :key="offer.id" class="flex items-start gap-2">
                   <NeedIcon :icon-key="offer.iconKey" :size="18" />
-                  <span>
+                  <span class="min-w-0 break-words">
                     {{ offer.name }}
                     <span class="text-black/45"> · {{ offer.category }}</span>
                   </span>

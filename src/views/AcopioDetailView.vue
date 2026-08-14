@@ -243,12 +243,12 @@ watch(
                 :href="contactHref(contact)"
                 :target="contact.type === 'whatsapp' ? '_blank' : undefined"
                 rel="noopener noreferrer"
-                class="truncate text-[#1f6f5b] underline"
+                class="break-words text-[#1f6f5b] underline"
               >
                 {{ contactLabel(contact) }}
               </a>
               <span v-else>{{ contactLabel(contact) }}</span>
-              <span v-if="contact.label" class="min-w-0 truncate text-black/50">
+              <span v-if="contact.label" class="min-w-0 break-words text-black/50">
                 · {{ contact.label }}
               </span>
             </div>
