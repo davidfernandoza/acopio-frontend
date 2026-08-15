@@ -16,9 +16,9 @@ async function installApp() {
 </script>
 
 <template>
-  <div class="flex min-h-0 w-full flex-1 flex-col bg-[var(--color-sand)]">
-    <header class="sticky top-0 z-40 shrink-0 border-b border-black/10 bg-[#f7f2e8]/95 backdrop-blur">
-      <div class="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4">
+  <div class="flex min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-x-clip bg-[var(--color-sand)]">
+    <header class="sticky top-0 z-40 w-full min-w-0 shrink-0 border-b border-black/10 bg-[#f7f2e8]/95 backdrop-blur">
+      <div class="mx-auto flex w-full min-w-0 max-w-6xl flex-col gap-2 px-4 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-4">
         <div class="flex flex-wrap items-center gap-2 sm:gap-3">
           <RouterLink
             to="/"
@@ -80,7 +80,7 @@ async function installApp() {
         {{ installHint }}
       </p>
     </header>
-    <main class="mx-auto flex min-h-screen w-full min-w-0 max-w-6xl flex-1 flex-col overflow-x-hidden px-4 py-8">
+    <main class="mx-auto flex min-h-screen w-full min-w-0 max-w-6xl flex-1 flex-col overflow-x-clip px-4 py-8">
       <RouterView />
     </main>
     <SiteFooter class="shrink-0" />

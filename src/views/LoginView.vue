@@ -70,10 +70,11 @@ function renderGoogleButton() {
     return;
   }
   googleButton.value.innerHTML = '';
+  const buttonWidth = Math.min(320, Math.floor(googleButton.value.clientWidth || 280));
   window.google.accounts.id.renderButton(googleButton.value, {
     theme: 'outline',
     size: 'large',
-    width: 320,
+    width: buttonWidth,
     text: authMode.value === 'register' ? 'signup_with' : 'signin_with',
   });
 }
@@ -121,7 +122,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="mx-auto max-w-md rounded-2xl border border-black/10 bg-white/70 p-6 shadow-sm">
+  <section class="mx-auto w-full min-w-0 max-w-md rounded-2xl border border-black/10 bg-white/70 p-6 shadow-sm">
     <div class="grid grid-cols-2 gap-2 rounded-lg border border-black/10 bg-white p-1">
       <button
         type="button"
@@ -224,7 +225,7 @@ onMounted(() => {
     </div>
 
     <div class="my-6 h-px bg-black/10" />
-    <div ref="googleButton" class="flex justify-center" />
+    <div ref="googleButton" class="flex w-full min-w-0 justify-center" />
     <p v-if="!googleClientId" class="mt-3 text-center text-xs text-black/50">
       Configura VITE_GOOGLE_CLIENT_ID para habilitar Google.
     </p>

@@ -82,24 +82,26 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div ref="rootElement" class="relative mt-1">
+  <div ref="rootElement" class="relative mt-1 w-full min-w-0">
     <button
       type="button"
-      class="flex w-full items-center justify-between rounded-md border border-black/15 bg-white px-3 py-2 text-left text-sm disabled:opacity-60"
+      class="flex w-full min-w-0 items-center justify-between gap-2 rounded-md border border-black/15 bg-white px-3 py-2 text-left text-sm disabled:opacity-60"
       :disabled="disabled"
       :aria-expanded="isOpen"
       @click="toggleOpen"
     >
-      <span :class="displayLabel ? 'text-inherit' : 'text-black/40'">
+      <span class="min-w-0 truncate" :class="displayLabel ? 'text-inherit' : 'text-black/40'">
         {{ displayLabel || placeholder }}
       </span>
-      <span class="ml-2 text-xs opacity-60">▾</span>
+      <span class="shrink-0 text-xs opacity-60">▾</span>
     </button>
 
     <input
       v-if="required"
-      class="pointer-events-none absolute h-0 w-0 opacity-0"
+      class="searchable-select-required"
       tabindex="-1"
+      size="1"
+      aria-hidden="true"
       :value="modelValue === 0 || modelValue === null || modelValue === '' ? '' : String(modelValue)"
       required
     />
@@ -141,3 +143,22 @@ onUnmounted(() => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.searchable-select-required {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  min-width: 0;
+  max-width: 1px;
+  clip: rect(0, 0, 0, 0);
+  opacity: 0;
+  pointer-events: none;
+}
+</style>

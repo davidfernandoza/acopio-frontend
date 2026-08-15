@@ -41,7 +41,7 @@ async function submitContactForm() {
 
 <template>
   <footer class="bg-[#14212b] text-[#f7f2e8]">
-    <div class="mx-auto grid max-w-6xl gap-10 px-4 py-10 md:grid-cols-2">
+    <div class="mx-auto grid min-w-0 max-w-6xl gap-10 px-4 py-10 md:grid-cols-2">
       <div>
         <p class="text-2xl font-semibold tracking-tight text-[#7dbaa8]">Acopio</p>
         <p class="mt-3 max-w-md text-sm text-white/70">

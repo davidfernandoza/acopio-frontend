@@ -34,7 +34,7 @@ function selectIcon(iconKey: string) {
         <NeedIcon icon-key="bank" :size="26" />
       </div>
     </div>
-    <div v-else class="flex flex-wrap gap-2">
+    <div v-else class="flex min-w-0 max-w-full flex-wrap gap-2">
       <button
         v-for="iconOption in productIconOptions"
         :key="iconOption.key"

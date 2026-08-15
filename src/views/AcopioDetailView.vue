@@ -8,6 +8,7 @@ import { formatThousands } from '../utils/numberFormat';
 import NeedIcon from '../components/NeedIcon.vue';
 import ImageCarousel from '../components/ImageCarousel.vue';
 import { Mail, MapPin, Phone } from '@lucide/vue';
+import AcopioShareActions from '../components/AcopioShareActions.vue';
 import { groupNeedsByType, groupOffersByCategory } from '../constants/needIcons';
 import type { AcopioContact, AcopioNeed } from '../types';
 
@@ -158,25 +159,25 @@ watch(
     {{ loadError }}
   </p>
   <section v-else-if="acopiosStore.currentAcopio" class="space-y-8">
-    <div class="flex items-start justify-between gap-4">
+    <div class="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
       <div class="flex min-w-0 flex-1 items-start gap-4">
         <img
           :src="resolveMediaUrl(acopiosStore.currentAcopio.avatarUrl) || buildInitialsAvatarUrl(acopiosStore.currentAcopio.name)"
           :alt="acopiosStore.currentAcopio.name" class="h-20 w-20 shrink-0 rounded-full object-cover ring-2 ring-[#1f6f5b]/25" />
         <div class="min-w-0 flex-1">
 
-          <h1 class="mt-1 flex flex-wrap items-baseline gap-x-3 text-4xl font-semibold">
+          <h1 class="mt-1 flex flex-wrap items-baseline gap-x-3 break-words text-3xl font-semibold sm:text-4xl">
             {{ acopiosStore.currentAcopio.name }}
             <span class="text-lg font-medium text-black/70">
               {{ acopiosStore.currentAcopio.status === 'open' ? 'Abierto' : 'Cerrado' }}
             </span>
           </h1>
-          <p class="mt-2 text-black/70">
+          <p class="mt-2 break-words text-black/70">
             Responsable: {{ acopiosStore.currentAcopio.responsibleName }}
           </p>
           <p class="mt-2 flex items-start gap-2 text-base font-medium text-black/85">
             <MapPin class="mt-0.5 h-5 w-5 shrink-0 text-[#1f6f5b]" :stroke-width="2" />
-            <span>
+            <span class="min-w-0 break-words">
               <template v-if="acopiosStore.currentAcopio.address?.city?.department?.country?.name">
                 {{ acopiosStore.currentAcopio.address.city.department.country.name }}
                 ·
@@ -199,19 +200,25 @@ watch(
           </p>
           <p
             v-if="acopiosStore.currentAcopio.description"
-            class="mt-2 whitespace-pre-wrap text-black/80"
+            class="mt-2 whitespace-pre-wrap break-words text-black/80"
           >
             {{ acopiosStore.currentAcopio.description }}
           </p>
         </div>
       </div>
-      <RouterLink
-        v-if="acopiosStore.currentAcopio.canManage"
-        :to="`/acopios/${idAcopio}/gestionar`"
-        class="nav-btn nav-btn-primary shrink-0"
-      >
-        Gestionar
-      </RouterLink>
+      <div class="order-first flex w-full min-w-0 flex-col gap-2 sm:order-none sm:w-auto sm:shrink-0">
+        <RouterLink
+          v-if="acopiosStore.currentAcopio.canManage"
+          :to="`/acopios/${idAcopio}/gestionar`"
+          class="nav-btn nav-btn-primary w-full"
+        >
+          Gestionar
+        </RouterLink>
+        <AcopioShareActions
+          :acopio-id="acopiosStore.currentAcopio.id"
+          :acopio-name="acopiosStore.currentAcopio.name"
+        />
+      </div>
     </div>
 
     <div ref="mapElement" class="h-[320px] w-full overflow-hidden rounded-2xl border border-black/10 bg-[#d9e8ef]" />
@@ -222,16 +229,16 @@ watch(
 
     <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
       <div class="flex min-w-0 flex-1 flex-col gap-6">
-      <section class="rounded-xl border border-black/10 bg-white/70 p-4">
+      <section class="min-w-0 overflow-hidden rounded-xl border border-black/10 bg-white/70 p-4">
         <h2 class="text-lg font-semibold">Contactos</h2>
-        <ul class="mt-3 space-y-3 text-sm">
+        <ul class="mt-3 min-w-0 space-y-3 text-sm">
           <li
             v-for="contact in acopiosStore.currentAcopio.contacts || []"
             :key="contact.id"
-            class="flex flex-wrap items-center justify-between gap-3"
+            class="flex min-w-0 items-center justify-between gap-3"
           >
-            <div class="flex min-w-0 flex-1 items-center gap-2">
-              <span class="shrink-0 text-[#1f6f5b]" aria-hidden="true">
+            <div class="flex min-w-0 flex-1 items-start gap-2">
+              <span class="mt-0.5 shrink-0 text-[#1f6f5b]" aria-hidden="true">
                 <svg
                   v-if="contact.type === 'whatsapp'"
                   viewBox="0 0 24 24"
@@ -245,19 +252,21 @@ watch(
                 <Phone v-else-if="contact.type === 'landline'" :size="20" :stroke-width="1.9" />
                 <Mail v-else :size="20" :stroke-width="1.9" />
               </span>
-              <a
-                v-if="contactHref(contact)"
-                :href="contactHref(contact)"
-                :target="contact.type === 'whatsapp' ? '_blank' : undefined"
-                rel="noopener noreferrer"
-                class="break-words text-[#1f6f5b] underline"
-              >
-                {{ contactLabel(contact) }}
-              </a>
-              <span v-else>{{ contactLabel(contact) }}</span>
-              <span v-if="contact.label" class="min-w-0 break-words text-black/50">
-                · {{ contact.label }}
-              </span>
+              <div class="min-w-0">
+                <a
+                  v-if="contactHref(contact)"
+                  :href="contactHref(contact)"
+                  :target="contact.type === 'whatsapp' ? '_blank' : undefined"
+                  rel="noopener noreferrer"
+                  class="break-all text-[#1f6f5b] underline"
+                >
+                  {{ contactLabel(contact) }}
+                </a>
+                <span v-else class="break-all">{{ contactLabel(contact) }}</span>
+                <p v-if="contact.label" class="mt-0.5 break-words text-black/50">
+                  {{ contact.label }}
+                </p>
+              </div>
             </div>
             <a
               v-if="contactHref(contact)"

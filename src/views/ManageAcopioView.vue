@@ -789,7 +789,7 @@ async function removeContact(idContact: number) {
 </script>
 
 <template>
-  <section v-if="acopiosStore.currentAcopio" class="space-y-8">
+  <section v-if="acopiosStore.currentAcopio" class="min-w-0 space-y-8">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div>
         <h1 class="text-3xl font-semibold">Gestionar {{ acopiosStore.currentAcopio.name }}</h1>
@@ -818,7 +818,7 @@ async function removeContact(idContact: number) {
 
     <div class="flex flex-col gap-6 lg:flex-row lg:items-start">
       <div class="flex min-w-0 flex-1 flex-col gap-6">
-        <form class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4" @submit.prevent="submitInfo">
+        <form class="min-w-0 max-w-full overflow-x-clip rounded-xl border border-black/10 bg-white/75 p-4 space-y-3" @submit.prevent="submitInfo">
           <h2 class="text-lg font-semibold">Información del acopio</h2>
           <label class="block text-sm">
             Nombre
@@ -858,13 +858,13 @@ async function removeContact(idContact: number) {
           </button>
         </form>
 
-        <section class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4">
+        <section class="min-w-0 max-w-full overflow-x-clip rounded-xl border border-black/10 bg-white/75 p-4 space-y-3">
           <img v-if="acopiosStore.currentAcopio.avatarUrl" :src="resolveMediaUrl(acopiosStore.currentAcopio.avatarUrl)"
             alt="Foto actual" class="h-16 w-16 rounded-full object-cover" />
           <AvatarCropper v-model="avatarBlob" :preview-name="acopiosStore.currentAcopio.name" />
         </section>
 
-        <form class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4" @submit.prevent="submitNeed">
+        <form class="min-w-0 max-w-full overflow-x-clip rounded-xl border border-black/10 bg-white/75 p-4 space-y-3" @submit.prevent="submitNeed">
           <h2 class="text-lg font-semibold">Necesitamos (recaudo)</h2>
           <p class="text-sm text-black/60">
             Agrégalos manualmente o con Excel.
@@ -1014,7 +1014,7 @@ async function removeContact(idContact: number) {
           <button type="submit" class="rounded-md bg-[#1f6f5b] px-3 py-2 text-white">Guardar necesidad</button>
         </form>
 
-        <form class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4" @submit.prevent="submitContact">
+        <form class="min-w-0 max-w-full overflow-x-clip rounded-xl border border-black/10 bg-white/75 p-4 space-y-3" @submit.prevent="submitContact">
           <h2 class="text-lg font-semibold">Contactos</h2>
           <ManageListSection :items="currentContacts" title="Contactos" empty-message="Aún no hay contactos.">
             <template #item="{ item: contact }">
@@ -1073,7 +1073,7 @@ async function removeContact(idContact: number) {
       </div>
 
       <div class="flex min-w-0 flex-1 flex-col gap-6">
-        <form class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4" @submit.prevent="submitLocation">
+        <form class="min-w-0 max-w-full overflow-x-clip rounded-xl border border-black/10 bg-white/75 p-4 space-y-3" @submit.prevent="submitLocation">
           <h2 class="text-lg font-semibold">Ubicación</h2>
           <div class="grid gap-3 md:grid-cols-3">
             <label class="text-sm">
@@ -1132,7 +1132,7 @@ async function removeContact(idContact: number) {
           </button>
         </form>
 
-        <section class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4">
+        <section class="min-w-0 max-w-full overflow-x-clip rounded-xl border border-black/10 bg-white/75 p-4 space-y-3">
           <div>
             <h2 class="text-lg font-semibold">Imágenes ({{ currentImages.length }}/{{ MAX_ACOPIO_GALLERY_IMAGES }},
               opcional)
@@ -1163,7 +1163,7 @@ async function removeContact(idContact: number) {
           </button>
         </section>
 
-        <form class="space-y-3 rounded-xl border border-black/10 bg-white/75 p-4" @submit.prevent="submitOffer">
+        <form class="min-w-0 max-w-full overflow-x-clip rounded-xl border border-black/10 bg-white/75 p-4 space-y-3" @submit.prevent="submitOffer">
           <h2 class="text-lg font-semibold">Estamos dando (opcional)</h2>
           <p class="text-sm text-black/60">
             Agrégalos manualmente o con Excel.

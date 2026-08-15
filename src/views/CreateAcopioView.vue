@@ -853,19 +853,19 @@ async function submitForm() {
 </script>
 
 <template>
-  <section class="mx-auto max-w-3xl space-y-6">
+  <section class="mx-auto w-full min-w-0 max-w-3xl space-y-6">
     <div>
       <h1 class="text-3xl font-semibold">Crear acopio</h1>
       <p class="mt-1 text-black/70">Registra ubicación, contactos y lo que están recibiendo.</p>
     </div>
 
-    <form class="space-y-6" @submit.prevent="submitForm">
-      <div class="space-y-6 rounded-2xl border border-black/10 bg-white/75 p-6">
-        <div class="grid items-start gap-6 md:grid-cols-[auto_1fr] md:gap-8">
+    <form class="min-w-0 space-y-6" @submit.prevent="submitForm">
+      <div class="min-w-0 max-w-full overflow-x-clip rounded-2xl border border-black/10 bg-white/75 p-4 sm:p-6 space-y-6">
+        <div class="grid min-w-0 items-start gap-6 md:grid-cols-[auto_1fr] md:gap-8">
           <div>
             <AvatarCropper v-model="avatarBlob" compact :preview-name="form.name || 'Acopio'" />
           </div>
-          <div class="space-y-4">
+          <div class="min-w-0 space-y-4">
             <label class="block text-sm">
               Nombre
               <input v-model="form.name" required class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
@@ -878,13 +878,13 @@ async function submitForm() {
           </div>
         </div>
 
-        <div class="grid gap-4 md:grid-cols-2">
-          <label class="text-sm">
+        <div class="grid min-w-0 gap-4 md:grid-cols-2">
+          <label class="min-w-0 text-sm">
             Responsable
             <input v-model="form.responsibleName" required placeholder="Nombre del responsable"
-              class="mt-1 w-full rounded-md border border-black/15 px-3 py-2" />
+              class="mt-1 w-full min-w-0 rounded-md border border-black/15 px-3 py-2" />
           </label>
-          <label class="text-sm">
+          <label class="min-w-0 text-sm">
             Acopio habilitado
             <SearchableSelect v-model="form.openingMode" :options="openingModeOptions" required />
           </label>
@@ -909,12 +909,12 @@ async function submitForm() {
         </div>
       </div>
 
-      <div class="space-y-3 rounded-2xl border border-black/10 bg-white/75 p-6">
+      <div class="min-w-0 max-w-full overflow-x-clip rounded-2xl border border-black/10 bg-white/75 p-4 sm:p-6 space-y-3">
         <div>
           <h2 class="text-lg font-semibold">Ubicación (requerido)</h2>
           <p class="text-sm text-black/60">Obligatorio.</p>
         </div>
-        <div class="grid gap-3 md:grid-cols-3">
+        <div class="grid min-w-0 gap-3 md:grid-cols-3">
           <label class="text-sm">
             País
             <SearchableSelect v-model="form.idCountry" :options="countryOptions" required />
@@ -967,7 +967,7 @@ async function submitForm() {
         </p>
       </div>
 
-      <div class="space-y-3 rounded-2xl border border-black/10 bg-white/75 p-6">
+      <div class="min-w-0 max-w-full overflow-x-clip rounded-2xl border border-black/10 bg-white/75 p-4 sm:p-6 space-y-3">
         <div>
           <h2 class="text-lg font-semibold">Contactos (requerido)</h2>
           <p class="text-sm text-black/60">Mínimo 1.</p>
@@ -1044,7 +1044,7 @@ async function submitForm() {
         </button>
       </div>
 
-      <div class="space-y-3 rounded-2xl border border-black/10 bg-white/75 p-6">
+      <div class="min-w-0 max-w-full overflow-x-clip rounded-2xl border border-black/10 bg-white/75 p-4 sm:p-6 space-y-3">
         <div>
           <h2 class="text-lg font-semibold">Imágenes del acopio (máx. {{ MAX_ACOPIO_GALLERY_IMAGES }}, opcional)</h2>
           <p class="mt-1 text-sm text-black/60">
@@ -1055,7 +1055,7 @@ async function submitForm() {
         <ImageDropzone v-model="galleryFiles" :max-files="MAX_ACOPIO_GALLERY_IMAGES" />
       </div>
 
-      <div class="space-y-3 rounded-2xl border border-black/10 bg-white/75 p-6">
+      <div class="min-w-0 max-w-full overflow-x-clip rounded-2xl border border-black/10 bg-white/75 p-4 sm:p-6 space-y-3">
         <div>
           <h2 class="text-lg font-semibold">Necesitamos (recaudo) (requerido)</h2>
           <p class="text-sm text-black/60">
@@ -1233,7 +1233,7 @@ async function submitForm() {
         </button>
       </div>
 
-      <div class="space-y-3 rounded-2xl border border-black/10 bg-white/75 p-6">
+      <div class="min-w-0 max-w-full overflow-x-clip rounded-2xl border border-black/10 bg-white/75 p-4 sm:p-6 space-y-3">
         <div>
           <h2 class="text-lg font-semibold">Estamos dando (opcional)</h2>
           <p class="text-sm text-black/60">
@@ -1282,7 +1282,7 @@ async function submitForm() {
         </button>
       </div>
 
-      <div class="space-y-3 rounded-2xl border border-black/10 bg-white/75 p-6">
+      <div class="min-w-0 max-w-full overflow-x-clip rounded-2xl border border-black/10 bg-white/75 p-4 sm:p-6 space-y-3">
         <div>
           <h2 class="text-lg font-semibold">Usuarios que pueden gestionar (opcional)</h2>
         </div>

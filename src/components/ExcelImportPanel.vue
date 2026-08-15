@@ -120,13 +120,13 @@ async function onFileChange(event: Event) {
 
 <template>
   <div class="space-y-2 rounded-lg border border-dashed border-black/15 bg-black/[0.02] p-3">
-    <div class="flex flex-wrap items-center gap-2">
-      <button type="button" class="nav-btn" @click="downloadTemplate">
+    <div class="flex min-w-0 max-w-full flex-wrap items-center gap-2">
+      <button type="button" class="nav-btn nav-btn-compact" @click="downloadTemplate">
         Descargar plantilla
       </button>
       <button
         type="button"
-        class="nav-btn nav-btn-primary"
+        class="nav-btn nav-btn-primary nav-btn-compact"
         :disabled="uploading"
         @click="openFilePicker"
       >
