@@ -238,9 +238,9 @@ watch([markers, viewerLocation], async () => {
     </div>
 
     <div class="space-y-4">
-      <div class="flex flex-wrap items-end justify-between gap-3">
+      <div class="space-y-3">
         <h2 class="text-2xl font-semibold">Acopios abiertos</h2>
-        <label class="block w-full text-sm sm:max-w-xs">
+        <label class="ml-auto block w-full text-sm md:w-1/2">
           Buscar acopio
           <input
             v-model="searchQuery"
