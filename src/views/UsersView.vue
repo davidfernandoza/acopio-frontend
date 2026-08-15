@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import apiClient from '../api/client';
 import SearchableSelect from '../components/SearchableSelect.vue';
+import { withPageReady } from '../composables/usePageReady';
 
 interface OwnedAcopio {
   id: number;
@@ -173,8 +174,10 @@ async function deleteUser(idUser: number) {
 }
 
 onMounted(async () => {
-  await loadOwnedAcopios();
-  await loadManagers();
+  await withPageReady(async () => {
+    await loadOwnedAcopios();
+    await loadManagers();
+  });
 });
 
 watch(selectedAcopioId, async () => {

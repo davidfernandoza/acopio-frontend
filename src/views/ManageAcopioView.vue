@@ -18,6 +18,7 @@ import ManageListSection from '../components/ManageListSection.vue';
 import ExcelImportPanel from '../components/ExcelImportPanel.vue';
 import { resolveMediaUrl } from '../utils/media';
 import { formatThousands, parseThousandsInput } from '../utils/numberFormat';
+import { withPageReady } from '../composables/usePageReady';
 import {
   createEmptyNeedForm,
   defaultProductCategoryKey,
@@ -552,17 +553,19 @@ async function submitLocation() {
 }
 
 onMounted(async () => {
-  await geoStore.loadCountries();
-  if (geoStore.countries.length) {
-    contactForm.idCountry = geoStore.countries[0].id;
-  }
-  const acopio = await acopiosStore.fetchAcopio(idAcopio.value);
-  if (!acopio.canManage) {
-    await router.replace(`/acopios/${idAcopio.value}`);
-    return;
-  }
-  fillInfoForm();
-  await fillLocationForm();
+  await withPageReady(async () => {
+    await geoStore.loadCountries();
+    if (geoStore.countries.length) {
+      contactForm.idCountry = geoStore.countries[0].id;
+    }
+    const acopio = await acopiosStore.fetchAcopio(idAcopio.value);
+    if (!acopio.canManage) {
+      await router.replace(`/acopios/${idAcopio.value}`);
+      return;
+    }
+    fillInfoForm();
+    await fillLocationForm();
+  });
 });
 
 watch(

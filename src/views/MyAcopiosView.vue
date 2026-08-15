@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import apiClient from '../api/client';
 import { useAuthStore } from '../stores/auth';
+import { withPageReady } from '../composables/usePageReady';
 
 interface MyAcopio {
   id: number;
@@ -43,8 +44,10 @@ function membershipLabel(membershipRole: MyAcopio['membershipRole']) {
   return membershipRole === 'owner' ? 'Administrador' : 'Gestor';
 }
 
-onMounted(() => {
-  void loadMyAcopios();
+onMounted(async () => {
+  await withPageReady(async () => {
+    await loadMyAcopios();
+  });
 });
 </script>
 

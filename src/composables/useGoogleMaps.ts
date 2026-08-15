@@ -141,6 +141,16 @@ export async function renderMap(options: {
   return map;
 }
 
+export function waitForMapIdle(map: google.maps.Map, timeoutMs = 4000): Promise<void> {
+  return new Promise((resolve) => {
+    const timeoutId = window.setTimeout(resolve, timeoutMs);
+    google.maps.event.addListenerOnce(map, 'idle', () => {
+      window.clearTimeout(timeoutId);
+      resolve();
+    });
+  });
+}
+
 export async function renderEditableLocationMap(options: {
   element: HTMLElement;
   latitude: number;

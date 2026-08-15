@@ -28,6 +28,7 @@ import {
 } from '../constants/needIcons';
 import { formatThousands, parseThousandsInput } from '../utils/numberFormat';
 import { MAX_ACOPIO_GALLERY_IMAGES } from '../constants/uploads';
+import { withPageReady } from '../composables/usePageReady';
 
 const router = useRouter();
 const acopiosStore = useAcopiosStore();
@@ -171,23 +172,25 @@ const cityOptions = computed(() =>
 );
 
 onMounted(async () => {
-  if (!authStore.user && authStore.token) {
-    try {
-      await authStore.fetchMe();
-    } catch {
-      // ignore; user can fill responsible manually
+  await withPageReady(async () => {
+    if (!authStore.user && authStore.token) {
+      try {
+        await authStore.fetchMe();
+      } catch {
+        // ignore; user can fill responsible manually
+      }
     }
-  }
-  if (!form.responsibleName && authStore.user?.name) {
-    form.responsibleName = authStore.user.name;
-  }
+    if (!form.responsibleName && authStore.user?.name) {
+      form.responsibleName = authStore.user.name;
+    }
 
-  await geoStore.loadCountries();
-  if (geoStore.countries.length) {
-    form.idCountry = geoStore.countries[0].id;
-    form.contacts[0].idCountry = geoStore.countries[0].id;
-    await geoStore.loadDepartments(form.idCountry);
-  }
+    await geoStore.loadCountries();
+    if (geoStore.countries.length) {
+      form.idCountry = geoStore.countries[0].id;
+      form.contacts[0].idCountry = geoStore.countries[0].id;
+      await geoStore.loadDepartments(form.idCountry);
+    }
+  });
 });
 
 watch(

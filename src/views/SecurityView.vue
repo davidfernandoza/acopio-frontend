@@ -4,6 +4,7 @@ import { RouterLink, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import apiClient from '../api/client';
 import type { AuthUser } from '../types';
+import { withPageReady } from '../composables/usePageReady';
 
 const authStore = useAuthStore();
 const router = useRouter();
@@ -27,9 +28,11 @@ const form = reactive({
   confirmPassword: '',
 });
 
-onMounted(() => {
-  form.name = authStore.user?.name || '';
-  form.email = authStore.user?.email || '';
+onMounted(async () => {
+  await withPageReady(() => {
+    form.name = authStore.user?.name || '';
+    form.email = authStore.user?.email || '';
+  });
 });
 
 async function saveCredentials() {

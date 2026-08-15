@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, RouterLink, useRouter } from 'vue-router';
 import { useAcopiosStore } from '../stores/acopios';
-import { renderMap } from '../composables/useGoogleMaps';
+import { renderMap, waitForMapIdle } from '../composables/useGoogleMaps';
 import { resolveMediaUrl, buildInitialsAvatarUrl } from '../utils/media';
 import { formatThousands } from '../utils/numberFormat';
 import NeedIcon from '../components/NeedIcon.vue';
@@ -11,6 +11,7 @@ import { Mail, MapPin, Phone } from '@lucide/vue';
 import AcopioShareActions from '../components/AcopioShareActions.vue';
 import { groupNeedsByType, groupOffersByCategory } from '../constants/needIcons';
 import type { AcopioContact, AcopioNeed } from '../types';
+import { withPageReady } from '../composables/usePageReady';
 
 const route = useRoute();
 const router = useRouter();
@@ -109,35 +110,38 @@ function scrollProfileToTop() {
 
 onMounted(async () => {
   window.addEventListener('keydown', onGalleryKeydown);
-  scrollProfileToTop();
-  loadError.value = '';
-  try {
-    const acopio = await acopiosStore.fetchAcopio(idAcopio.value);
-    openImageFromQuery();
-    await nextTick();
+  await withPageReady(async () => {
     scrollProfileToTop();
-    if (!mapsApiKey || !mapElement.value || !acopio.address) {
-      return;
-    }
+    loadError.value = '';
     try {
-      const map = await renderMap({
-        element: mapElement.value,
-        latitude: Number(acopio.address.latitude),
-        longitude: Number(acopio.address.longitude),
-        title: acopio.name,
-      });
-      google.maps.event.addListenerOnce(map, 'idle', () => {
-        scrollProfileToTop();
-      });
+      const acopio = await acopiosStore.fetchAcopio(idAcopio.value);
+      openImageFromQuery();
+      await nextTick();
       scrollProfileToTop();
-    } catch (error: any) {
-      mapError.value = error?.message || 'No se pudo cargar el mapa';
+      if (!mapsApiKey || !mapElement.value || !acopio.address) {
+        return;
+      }
+      try {
+        const map = await renderMap({
+          element: mapElement.value,
+          latitude: Number(acopio.address.latitude),
+          longitude: Number(acopio.address.longitude),
+          title: acopio.name,
+        });
+        google.maps.event.addListenerOnce(map, 'idle', () => {
+          scrollProfileToTop();
+        });
+        await waitForMapIdle(map);
+        scrollProfileToTop();
+      } catch (error: any) {
+        mapError.value = error?.message || 'No se pudo cargar el mapa';
+      }
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { data?: { message?: string } } };
+      loadError.value =
+        axiosError?.response?.data?.message || 'No se pudo cargar el perfil del acopio';
     }
-  } catch (error: unknown) {
-    const axiosError = error as { response?: { data?: { message?: string } } };
-    loadError.value =
-      axiosError?.response?.data?.message || 'No se pudo cargar el perfil del acopio';
-  }
+  });
 });
 
 onUnmounted(() => {

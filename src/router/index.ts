@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import { usePageLoaderStore } from '../stores/pageLoader';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -58,7 +59,11 @@ const router = createRouter({
   ],
 });
 
-router.beforeEach(async (to) => {
+router.beforeEach(async (to, from) => {
+  const pageLoader = usePageLoaderStore();
+  if (to.path !== from.path) {
+    pageLoader.startRoute();
+  }
   const authStore = useAuthStore();
   if (authStore.token && !authStore.user) {
     try {

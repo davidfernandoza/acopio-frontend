@@ -82,6 +82,10 @@ async function copyShareLink() {
   }
 }
 
+function canUseWebShare() {
+  return 'share' in navigator;
+}
+
 async function shareToInstagram() {
   copyMessage.value = '';
   try {
@@ -91,7 +95,7 @@ async function shareToInstagram() {
     copyMessage.value = 'Copia el enlace y pégalo en Instagram.';
   }
 
-  if (navigator.share) {
+  if (canUseWebShare()) {
     await shareWithDevice(isQrModalOpen.value);
     return;
   }
@@ -118,7 +122,7 @@ async function shareWithDevice(includeQrFile: boolean) {
     }
   }
 
-  if (!navigator.share) {
+  if (!canUseWebShare()) {
     if (includeQrFile) {
       isQrModalOpen.value = true;
     } else {
@@ -144,7 +148,7 @@ async function shareWithDevice(includeQrFile: boolean) {
 }
 
 async function openShareModal() {
-  if (navigator.share) {
+  if (canUseWebShare()) {
     await shareWithDevice(false);
     return;
   }

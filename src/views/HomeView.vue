@@ -2,13 +2,14 @@
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { RouterLink, useRouter } from 'vue-router';
 import { useAcopiosStore } from '../stores/acopios';
-import { focusMapOnLocation, getBrowserLocation, renderMarkersMap } from '../composables/useGoogleMaps';
+import { focusMapOnLocation, getBrowserLocation, renderMarkersMap, waitForMapIdle } from '../composables/useGoogleMaps';
 import { resolveMediaUrl, buildInitialsAvatarUrl } from '../utils/media';
 import { formatThousands } from '../utils/numberFormat';
 import NeedIcon from '../components/NeedIcon.vue';
 import ImageCarousel from '../components/ImageCarousel.vue';
 import { groupNeedsByType, groupOffersByCategory } from '../constants/needIcons';
 import type { Acopio, AcopioNeed, CarouselSlide } from '../types';
+import { withPageReady } from '../composables/usePageReady';
 
 const acopiosStore = useAcopiosStore();
 const router = useRouter();
@@ -161,14 +162,19 @@ async function drawMap() {
 
 onMounted(async () => {
   window.addEventListener('keydown', onHomeKeydown);
-  const [, , detectedBrowserLocation] = await Promise.all([
-    acopiosStore.fetchAcopios(),
-    acopiosStore.fetchCarousel(),
-    getBrowserLocation(),
-  ]);
-  browserLocation.value = detectedBrowserLocation;
-  await nextTick();
-  await drawMap();
+  await withPageReady(async () => {
+    const [, , detectedBrowserLocation] = await Promise.all([
+      acopiosStore.fetchAcopios(),
+      acopiosStore.fetchCarousel(),
+      getBrowserLocation(),
+    ]);
+    browserLocation.value = detectedBrowserLocation;
+    await nextTick();
+    await drawMap();
+    if (markersMap) {
+      await waitForMapIdle(markersMap);
+    }
+  });
 });
 
 onUnmounted(() => {

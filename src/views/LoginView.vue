@@ -3,6 +3,7 @@ import { nextTick, onMounted, ref, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import apiClient from '../api/client';
+import { withPageReady } from '../composables/usePageReady';
 
 const authStore = useAuthStore();
 const router = useRouter();
@@ -116,8 +117,11 @@ watch(authMode, async () => {
   renderGoogleButton();
 });
 
-onMounted(() => {
-  ensureGoogleButton();
+onMounted(async () => {
+  await withPageReady(async () => {
+    ensureGoogleButton();
+    await nextTick();
+  });
 });
 </script>
 

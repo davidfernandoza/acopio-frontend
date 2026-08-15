@@ -1,14 +1,20 @@
 <script setup lang="ts">
+import { onMounted } from 'vue';
 import { RouterLink, RouterView, useRoute } from 'vue-router';
 import { useAuthStore } from './stores/auth';
 import { usePwaInstall } from './composables/usePwaInstall';
 import UserMenu from './components/UserMenu.vue';
 import SiteFooter from './components/SiteFooter.vue';
 import WelcomeModal from './components/WelcomeModal.vue';
+import PageLoader from './components/PageLoader.vue';
 
 const route = useRoute();
 const authStore = useAuthStore();
 const { isInstalled, installHint, isPrompting, promptInstall } = usePwaInstall();
+
+onMounted(() => {
+  document.getElementById('boot-page-loader')?.remove();
+});
 
 async function installApp() {
   await promptInstall();
@@ -81,9 +87,10 @@ async function installApp() {
       </p>
     </header>
     <main class="mx-auto flex min-h-screen w-full min-w-0 max-w-6xl flex-1 flex-col overflow-x-clip px-4 py-8">
-      <RouterView />
+      <RouterView :key="route.path" />
     </main>
     <SiteFooter class="shrink-0" />
     <WelcomeModal />
+    <PageLoader />
   </div>
 </template>
